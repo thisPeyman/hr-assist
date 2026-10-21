@@ -4,14 +4,30 @@
 
 **Blocked by:** 10 (Org & auth walking skeleton).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Upload PDF/DOCX/TXT → Candidate in the Talent Pool with structured Profile, sub-minute on the sync path
-- [ ] Every submitted document reaches an explicit terminal status (`extracted` / `needs_review` / `failed` / `not_a_resume`) — nothing dropped silently
-- [ ] Retry ladder holds: validation fail → one repair-retry → escalate → `needs_review`, never a drop
-- [ ] Mixed Persian/English resumes extract correctly; values stay verbatim in the resume's own language
-- [ ] Work-history date ranges display in Jalali on candidate detail
-- [ ] Identical file (same SHA-256) does not create a duplicate Candidate
-- [ ] Jobs run on the Postgres jobs table with SKIP LOCKED; no Redis/Celery
-- [ ] Model name lives in config; prompts in versioned files; `model` + `prompt_version` + `schema_version` stored per row; original bytes, raw text, and raw model JSON retained
-- [ ] Talent Pool list and candidate detail render the Profile; tests across schema, API, and UI
+- [x] Upload PDF/DOCX/TXT → Candidate in the Talent Pool with structured Profile, sub-minute on the sync path
+- [x] Every submitted document reaches an explicit terminal status (`extracted` / `needs_review` / `failed` / `not_a_resume`) — nothing dropped silently
+- [x] Retry ladder holds: validation fail → one repair-retry → escalate → `needs_review`, never a drop
+- [x] Mixed Persian/English resumes extract correctly; values stay verbatim in the resume's own language
+- [x] Work-history date ranges display in Jalali on candidate detail
+- [x] Identical file (same SHA-256) does not create a duplicate Candidate
+- [x] Jobs run on the Postgres jobs table with SKIP LOCKED; no Redis/Celery
+- [x] Model name lives in config; prompts in versioned files; `model` + `prompt_version` + `schema_version` stored per row; original bytes, raw text, and raw model JSON retained
+- [x] Talent Pool list and candidate detail render the Profile; tests across schema, API, and UI
+
+## Answer
+
+Implemented on `master` (commits `e8b44a9` backend, `a3b7b07` frontend, `573c8bf` review fixes).
+
+**Backend** (`app/parsing/`): two-layer pipeline per spec §7.3 — OSS text extraction (`extract_text.py`: pypdf pre-pass for encryption/corruption → pdfplumber for PDFs; python-docx with a raw `document.xml` strip fallback for DOCX; TXT trivial; scanned/empty → `needs_review` until ticket 21's OCR) feeding **one strict structured-output OpenAI call** (`llm.py`: Responses API, `json_schema` strict; models from config `HR_RESUME_EXTRACT_MODEL`/`…_ESCALATION` defaulting gpt-5.6-luna → gpt-6.1-sol; prompt in `prompts/resume_extract_v1.md`). Retry ladder (`run_extraction_ladder`): pydantic validation → one repair-retry on the same model with errors appended → escalation → `needs_review`; transport failure jumps once to escalation (model-churn resilience) then `failed`. `pipeline.py` runs each job to an explicit terminal status — `extracted` (Candidate + `resume_added` CandidateActivity + Profile), `needs_review` (reasons: `extraction:*`, `low_confidence`, `model_flagged`, `missing_identity`, `missing_name`, `validation_failed`), `not_a_resume`, `failed` — an unexpected exception is caught and recorded, never a silent drop. Values stay verbatim (prompt + tests pin Persian/English mixed content); dates normalize to ISO prefixes only when confidently Gregorian (**[0-9] digit classes — `\d` matches Persian digits and corrupted Jalali dates; caught in review**), Jalali-written dates stay as written and render as-is.
+
+**Queue** (`worker.py`): Postgres jobs table only, no Redis/Celery. RLS makes a one-shot cross-Org claim impossible, so claims are two-phase (find oldest pending via a SELECT-only queue-visibility policy → pin its org GUC → `FOR UPDATE SKIP LOCKED`); a worker crash rolls back to `pending`. Single uploads run the pipeline **inline** in the request transaction (sync, sub-minute); a lifespan loop (`main.py`) drains the queue for async paths. Upload dedupe is race-free: `INSERT … ON CONFLICT (org_id, sha256) DO NOTHING`.
+
+**Schema** (migration `0003`): `candidates`, `candidate_activity`, `resume_files` (bytes/sha256/mime; column-level UPDATE grant on `candidate_id` only), `parse_jobs` (7-value status enum incl. ticket-21 routes, model/prompt_version/schema_version/timings/attempts/reason), `resume_extractions` (raw_text + raw model JSON + versions) — every table `org_id` + RLS enabled **and** FORCED, policies keyed by the transaction-local GUC; `users`/`orgs` got server-side UUID defaults. API: `POST /api/candidates/upload` (multipart; EMPTY_FILE/FILE_TOO_LARGE as 4xx before submission), `GET /api/candidates`, `GET /api/candidates/{id}` (Profile + latest resume + explicit parse status).
+
+**Frontend**: `/pool` — Talent Pool list + saffron-ruled upload tray (drag-drop/pick, PDF/DOCX/TXT) with honest Persian outcomes (extracted → navigates to the new dossier; duplicate → links the existing one; needs_review/not_a_resume/failed → reason via `parseStatusLabel`); `/candidates/:id` — identity header, contact chips, latest-resume card with status badge, and the Profile rendered verbatim with work-history date ranges on a turquoise rail in Jalali (`lib/profile.ts`: exact ISO dates convert; month precision rounds via midpoint; year-only and verbatim Persian dates stay as written; `تا کنون` comes from the structured `current` flag). Home links to the pool.
+
+**Tests** (all six agreed seams, 117 backend + 22 frontend): schema (tables/RLS flags/policies/enum/unique/least-privilege grants), RLS (cross-Org denial on all new tables + the exact parse_jobs queue carve-out), extraction units (real in-memory PDF/DOCX fixtures, textbox fallback, truncation), ladder units (fake extractor), pipeline units (every terminal status, verbatim Persian, raw-JSON retention), worker units (two-session SKIP LOCKED proof, drain), API (upload→pool→detail, dedupe, tenancy, fake extractor injected at the dependency seam), UI units (Jalali anchors incl. the Persian-digit regression). `make ci` green.
+
+**Review** (two-axis, sub-agents): spec axis found the `\d`/Persian-digit date corruption, the dedupe race, and missing raw-JSON on validation failures — all fixed in `573c8bf`; standards axis findings addressed or accepted as documented judgement calls (pydantic contract renamed `ResumeExtractionData`; `sniff_kind`'s unused filename param kept deliberately — content wins, per-extension gates arrive with ticket 21).
