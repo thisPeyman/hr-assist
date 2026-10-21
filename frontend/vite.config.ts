@@ -13,9 +13,10 @@ export default defineConfig({
     },
   },
   server: {
+    // Point the dev proxy at wherever the backend runs (BACKEND_ORIGIN=http://localhost:8001 npm run dev)
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/auth': 'http://localhost:8000',
+      '/api': process.env.BACKEND_ORIGIN ?? 'http://localhost:8000',
+      '/auth': process.env.BACKEND_ORIGIN ?? 'http://localhost:8000',
     },
   },
   test: {
