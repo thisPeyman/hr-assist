@@ -26,6 +26,8 @@ We concede: job-board distribution networks, sourcing databases, HRIS suites, ag
 
 **Stack constraints (locked):** Python backend, React + shadcn/ui frontend, Postgres (pgvector allowed). **Build-not-buy**: the OpenAI API is the only paid external dependency; free infra tiers acceptable. Standard cloud-AI privacy posture is acceptable for v1.
 
+**Language & locale (locked):** The product is **Persian-first**. Every user-facing surface — GUI strings, the Booking Page, AI outputs (resume summaries, compare key-differences, outreach/invite/rejection drafts), and system email (invites, verification, resets, reminders) — is in **Persian (fa)** with **RTL layout end-to-end**. Dates render to users in **Jalali (Shamsi)**; storage and APIs stay Gregorian ISO 8601 — conversion happens at the presentation layer only. Resumes arrive **mixed Persian/English** (the norm in this market): extraction stays **verbatim, never translated** — values keep the resume's own language; only synthesized output is Persian. Persian text is normalized (ZWNJ, Arabic ی/ک → Persian forms) before indexing and at query time; lexical search runs on the normalized text with a `simple` FTS config (Postgres ships no Persian dictionary), and `pg_trgm` covers Persian names for typo tolerance. NL search accepts Persian and mixed fa/en queries; chips render Persian labels. Bilingual fa/en is out of scope for v1.
+
 **In scope (v1):**
 
 - Org signup, users, Admin/Member roles, in-app notifications
@@ -101,7 +103,7 @@ We concede: job-board distribution networks, sourcing databases, HRIS suites, ag
 
 - Address shape: `resumes+<companySlug>@jobs.<app-domain>`; one catch-all rule → one ~20-line Worker. The slug acts as a weak shared secret.
 - Worker streams `message.raw` (octet-stream) to `POST /hooks/inbound-mail` with `X-Webhook-Secret`; **parallel forward to a backup dead-drop mailbox** (durability — Cloudflare won't retry our webhook); `setReject()` for non-matching recipients (proper SMTP bounce, not silence). No parsing in the Worker (free-plan 10 ms CPU).
-- Python webhook: **durable-write first** (inbox row + raw .eml in object storage), return 200, then async: parse MIME, attachments-first/body-second, strip quoted chains + signatures, **ClamAV + type/size allowlist** (pdf/docx/txt/images). Idempotency key = `Message-ID` + recipient. Sender-MTA retries (~24–48h) cover provider outages.
+- Python webhook: **durable-write first** (inbox row + raw .eml in object storage), return 200, then async: parse MIME, attachments-first/body-second, strip quoted chains + signatures, **ClamAV + type/size allowlist** (pdf/docx/txt/images); Persian subjects/bodies arrive as RFC 2047 encoded-words and must parse correctly. Idempotency key = `Message-ID` + recipient. Sender-MTA retries (~24–48h) cover provider outages.
 - **Upgrade path** (trigger order): Cloudflare Queues + R2 for guaranteed delivery → Workers Paid $5/mo when parsing gets heavy → Amazon SES receiving (~$0.10/1k) or a paid inbound API only if needed. The raw-MIME contract makes that a one-record MX swap.
 
 ### 7.2 Upload
@@ -112,8 +114,8 @@ Same pipeline from W2, entered via the GUI; sync calls for sub-minute UX on sing
 
 Two layers: **OSS text extraction → one strict structured-output OpenAI call.**
 
-1. **Extraction (local, free):** PDFs — pypdf pre-pass (encryption/corruption check) → **pdfplumber** (layout-aware); scanned pages detected by text density → **OCRmyPDF/Tesseract** → re-extract; still junk → **vision fallback** (page images into the LLM call). DOCX — python-docx, raw `document.xml` strip as text-box fallback. TXT/HTML trivial. Images → direct vision route. Legacy `.doc`/RTF — config-gated LibreOffice convert, else `needs_review` + "re-upload as PDF/DOCX" nudge.
-2. **Structured extraction (the only paid step):** one **Responses API call, strict `json_schema` structured outputs** — **gpt-5.6-luna** workhorse, escalate hard cases to **gpt-6.1-sol**. Schema: conservative, verbatim-only (`contact`, `work_experience[]` with date ranges, `education[]`, `skills[]`, `is_resume`, `confidence`, `needs_review`, …); dates as strings normalized in Python; `schema_version` + `model` + `prompt_version` stored per row. Retry ladder: pydantic validation → one repair-retry same model → escalate → **`needs_review`, never dropped**.
+1. **Extraction (local, free):** PDFs — pypdf pre-pass (encryption/corruption check) → **pdfplumber** (layout-aware); scanned pages detected by text density → **OCRmyPDF/Tesseract** (Persian + English language packs) → re-extract; still junk → **vision fallback** (page images into the LLM call). DOCX — python-docx, raw `document.xml` strip as text-box fallback. TXT/HTML trivial. Images → direct vision route. Legacy `.doc`/RTF — config-gated LibreOffice convert, else `needs_review` + "re-upload as PDF/DOCX" nudge.
+2. **Structured extraction (the only paid step):** one **Responses API call, strict `json_schema` structured outputs** — **gpt-5.6-luna** workhorse, escalate hard cases to **gpt-6.1-sol**. Schema: conservative, verbatim-only — values keep the resume's own language, Persian or English, never translated (`contact`, `work_experience[]` with date ranges, `education[]`, `skills[]`, `is_resume`, `confidence`, `needs_review`, …); dates as strings normalized in Python; `schema_version` + `model` + `prompt_version` stored per row. Retry ladder: pydantic validation → one repair-retry same model → escalate → **`needs_review`, never dropped**.
 
 Async worker on a **Postgres jobs table** (`SELECT … FOR UPDATE SKIP LOCKED`) — no Redis/Celery at this scale. Terminal statuses: `extracted | ocr_applied | vision_used | needs_review | failed | not_a_resume`. SHA-256 file dedupe. **Batch API (−50%)** for bulk/backfill imports. Original bytes, raw text, and raw model JSON are all kept — re-parse campaigns are UPDATE + re-enqueue.
 
@@ -121,13 +123,14 @@ Async worker on a **Postgres jobs table** (`SELECT … FOR UPDATE SKIP LOCKED`) 
 
 ## 8. AI features & architecture (from [04], [02])
 
-Four actions, one shared prompt skeleton: **system (role/audience/tone) → grounding block (relevant structured fields + targeted excerpts, never the whole blob) → output contract (JSON schema or constrained prose) → guardrails** (every claim traces to provided data; unknown → "not stated in resume"; never infer or mention protected characteristics; descriptive, never evaluative). Prompts are versioned files in the repo with a ~20-input golden-set eval run on changes.
+Four actions, one shared prompt skeleton: **system (role/audience/tone) → grounding block (relevant structured fields + targeted excerpts, never the whole blob) → output contract (JSON schema or constrained prose) → guardrails** (every claim traces to provided data; unknown → "not stated in resume"; never infer or mention protected characteristics; descriptive, never evaluative). Prompts are versioned files in the repo with a ~20-input golden-set eval run on changes. **All synthesized output is Persian** — summaries, key-differences, drafts — even when the grounding resume is English; grounding data itself stays verbatim.
 
 ### 8.1 NL candidate search — hybrid, structured-first
 
 One cheap LLM call parses the query into a **filter DSL**: `filters` (hard constraints: YOE thresholds, enums, negations, pipeline fields → compiled to SQL) + `semantic_query` (soft residual → pgvector cosine + Postgres FTS fused by **RRF**) + `constraint_softness` (for one-click "relax softest constraint" on empty results).
 
 - **Numbers and negations never touch embeddings.** `years_experience_total` (and per-skill approximations) computed **in Python at ingestion** from role date ranges; the LLM only emits the threshold. Negations compile to SQL `NOT` and render as visible chips.
+- **Persian & mixed queries.** The query-parse prompt handles Persian and mixed fa/en (including Persian numerals and YOE phrasing); all indexed text and queries pass Persian normalization (ZWNJ, Arabic ی/ک → Persian forms); lexical FTS runs on the normalized text with the `simple` config (Postgres ships no Persian dictionary); `pg_trgm` typo tolerance covers Persian names.
 - **Index:** one **candidate-level embedding of a synthesized "search document"** (normalized fields + condensed resume text — not chunks; queries rank whole people), `tsvector` generated column + GIN, HNSW on the vector, B-tree tenant pre-filter with **exact vector scans at v1 scale** (HNSW iterative scans / partitioning = documented escalation). `pg_trgm` on names for typo tolerance.
 - **Editable chips** are the GUI bridge: LLM mistranslation becomes a correction loop; chip edits re-run pure SQL. Parsed DSL cached per (tenant, query string).
 - **Degradations:** parse fail → lexical-only fallback with a toast; vector fail → structured + lexical still run.
@@ -180,6 +183,8 @@ Three email types — first-contact outreach, interview invite (wraps the bookin
 
 ## 11. Screens (from [08]; visual reference: [`prototype/pipeline-ui-prototype.html`](prototype/pipeline-ui-prototype.html), Variant A + B's header/detail)
 
+All screens are RTL with Persian strings and Jalali dates (§3 Language & locale).
+
 1. **Board home** — kanban columns per org-wide Stage; drag to move. Terminal stages (**Rejected/Withdrawn**) render as **collapsed columns** at the board's right edge, expandable on click — live pipeline gets the width *(spec's call on 08's TBD)*. Cards: name, headline/current title, Owner badge (Unassigned visible).
 2. **NL-chips search header** — prominent on the home screen; interpreted filters as editable chips; results stream behind them; "relax softest constraint" on empty. Covers the whole Talent Pool, including Candidates with no live Application.
 3. **Full-page candidate detail** *(canonical detail surface — no peek-drawer in v1, spec's call)* — AI summary card; latest-resume view; **editable Profile** (with diff-accept on new resume); Notes + Activity timeline (application and candidate levels); applications list; AI action buttons: **summarize / compare / draft email / propose slots**.
@@ -202,7 +207,7 @@ Three email types — first-contact outreach, interview invite (wraps the bookin
 4. **Compliance posture holds end-to-end:** zero scoring/ranking/fit verdicts anywhere in product or prompts; protected-attribute filters blocked at the validation layer; every candidate-facing email required an explicit human send; AI outputs surface "not stated" rather than inventing.
 5. **Scheduling round-trip works as designed:** propose → book on the Booking Page → Calendar event with Meet link → 24h/1h reminders → reschedule/cancel honored until cutoff — and no stage ever moves automatically.
 6. **Tenancy is airtight:** RLS enforced, app-layer scoping, deactivate-only user removal with attribution preserved.
-7. **Pilot-ready:** an HR generalist runs the full loop — ingest → pipeline → search → compare → outreach → schedule → hire/reject — entirely in-app, without leaving for spreadsheets or a separate scheduler.
+7. **Pilot-ready:** an HR generalist runs the full loop — ingest → pipeline → search → compare → outreach → schedule → hire/reject — entirely in-app, in Persian (RTL, Jalali), without leaving for spreadsheets or a separate scheduler.
 
 ## 14. Later phases (sketch, not committed)
 
