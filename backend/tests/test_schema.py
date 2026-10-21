@@ -138,3 +138,16 @@ async def test_app_role_cannot_run_ddl(superuser_engine):
             sa.text("select has_schema_privilege('hr_app', 'public', 'CREATE')")
         )
         assert not priv.scalar()
+
+
+async def test_activity_is_append_only_for_app(superuser_engine):
+    """Activity is an immutable, append-only stream (GLOSSARY) — the app role
+    must not be able to UPDATE or DELETE it, even inside its own Org."""
+    async with superuser_engine.connect() as conn:
+        for denied in ("UPDATE", "DELETE"):
+            priv = await conn.execute(
+                sa.text(
+                    f"select has_table_privilege('hr_app', 'org_activity', '{denied}')"
+                )
+            )
+            assert not priv.scalar()

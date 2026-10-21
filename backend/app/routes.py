@@ -8,15 +8,12 @@ from fastapi_users import InvalidPasswordException
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
 from fastapi_users.exceptions import UserAlreadyExists
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.db import get_session
-from app.models import Membership, Org
-from app.tenancy import TenantContextDep
+from app.tenancy import TenantContextDep, load_membership_with_org
 from app.users import (
-    COOKIE_NAME,
+    SESSION_COOKIE_ATTRS,
     UserCreate,
     UserManagerDep,
     auth_backend,
@@ -52,15 +49,7 @@ class MeResponse(BaseModel):
 
 
 def set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        max_age=settings.session_lifetime_seconds,
-        path="/",
-        secure=settings.cookie_secure,
-        httponly=True,
-        samesite="lax",
-    )
+    response.set_cookie(value=token, **SESSION_COOKIE_ATTRS)
 
 
 @auth_router.post(
@@ -90,13 +79,10 @@ async def signup(
             detail="REGISTER_USER_ALREADY_EXISTS",
         ) from exc
 
-    membership, org = (
-        await session.execute(
-            select(Membership, Org)
-            .join(Org, Membership.org_id == Org.id)
-            .where(Membership.user_id == user.id)
-        )
-    ).one()
+    loaded = await load_membership_with_org(session, user.id)
+    if loaded is None:  # unreachable: signup just created it
+        raise HTTPException(status_code=500, detail="SIGNUP_MEMBERSHIP_MISSING")
+    membership, org = loaded
 
     # Signup is immediately active (spec §10): hand back a session cookie too.
     token = await strategy.write_token(user)

@@ -81,19 +81,21 @@ class TestWriteIsolation:
                 )
 
     async def test_cannot_update_other_org_rows(self, app_engine):
+        """Cross-Org UPDATE fails twice over: privilege revoked (append-only)
+        and, had it not been, the RLS policy would scope it to 0 rows."""
         await _seed_org_with_activity(app_engine, ORG_A, "A")
         await _seed_org_with_activity(app_engine, ORG_B, "B")
 
         async with app_engine.connect() as conn:
             await _set_org(conn, ORG_A)
-            result = await conn.execute(
-                sa.text(
-                    "update org_activity set event_type = 'tampered' "
-                    "where org_id = :id"
-                ),
-                {"id": ORG_B},
-            )
-            assert result.rowcount == 0
+            with pytest.raises(sa.exc.DBAPIError, match="permission denied"):
+                await conn.execute(
+                    sa.text(
+                        "update org_activity set event_type = 'tampered' "
+                        "where org_id = :id"
+                    ),
+                    {"id": ORG_B},
+                )
 
     async def test_cannot_delete_other_org_rows(self, app_engine):
         await _seed_org_with_activity(app_engine, ORG_A, "A")
@@ -101,7 +103,8 @@ class TestWriteIsolation:
 
         async with app_engine.connect() as conn:
             await _set_org(conn, ORG_A)
-            result = await conn.execute(
-                sa.text("delete from org_activity where org_id = :id"), {"id": ORG_B}
-            )
-            assert result.rowcount == 0
+            with pytest.raises(sa.exc.DBAPIError, match="permission denied"):
+                await conn.execute(
+                    sa.text("delete from org_activity where org_id = :id"),
+                    {"id": ORG_B},
+                )

@@ -116,6 +116,9 @@ def upgrade() -> None:
         ),
     )
     op.create_index("org_activity_org_id_idx", "org_activity", ["org_id"])
+    op.create_index(
+        "org_activity_actor_user_id_idx", "org_activity", ["actor_user_id"]
+    )
     op.create_table(
         "access_tokens",
         sa.Column("token", sa.String(length=43), primary_key=True),
@@ -138,6 +141,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("access_tokens_created_at_idx", table_name="access_tokens")
     op.drop_table("access_tokens")
+    op.drop_index("org_activity_actor_user_id_idx", table_name="org_activity")
     op.drop_index("org_activity_org_id_idx", table_name="org_activity")
     op.drop_table("org_activity")
     op.drop_index("memberships_org_id_idx", table_name="memberships")

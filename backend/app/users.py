@@ -156,6 +156,17 @@ UserManagerDep = Annotated[UserManager, Depends(get_user_manager)]
 
 COOKIE_NAME = "hr_session"
 
+# Single source of truth for the session cookie's attributes, so the
+# CookieTransport (login/logout) and our signup response never drift apart.
+SESSION_COOKIE_ATTRS = {
+    "key": COOKIE_NAME,
+    "max_age": settings.session_lifetime_seconds,
+    "path": "/",
+    "secure": settings.cookie_secure,
+    "httponly": True,
+    "samesite": "lax",
+}
+
 cookie_transport = CookieTransport(
     cookie_name=COOKIE_NAME,
     cookie_max_age=settings.session_lifetime_seconds,

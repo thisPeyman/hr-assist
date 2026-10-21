@@ -27,7 +27,9 @@ export function HomePage() {
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
   // Storage stays Gregorian ISO; conversion happens only here, at render.
-  const [todayIso] = useState(() => new Date().toISOString().slice(0, 10))
+  // en-CA renders the LOCAL date as YYYY-MM-DD (toISOString would be UTC and
+  // wrong for "today" in Iran's evenings).
+  const [todayIso] = useState(() => new Date().toLocaleDateString("en-CA"))
 
   async function onLogout() {
     setLoggingOut(true)

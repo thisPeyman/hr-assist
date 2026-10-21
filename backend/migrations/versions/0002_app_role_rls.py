@@ -44,16 +44,20 @@ def upgrade() -> None:
         """
     )
     # Least privilege: the app can do exactly what signup/login/me need.
+    # org_activity is append-only (GLOSSARY: Activity is immutable) — no
+    # UPDATE/DELETE; the GDPR-anonymization ticket grants those narrowly.
     op.execute("grant usage on schema public to hr_app")
     op.execute("grant select, insert on public.users to hr_app")
     op.execute("grant select, insert on public.orgs to hr_app")
     op.execute("grant select, insert on public.memberships to hr_app")
-    op.execute(
-        "grant select, insert, update, delete on public.org_activity to hr_app"
-    )
+    op.execute("grant select, insert on public.org_activity to hr_app")
     op.execute("grant select, insert, delete on public.access_tokens to hr_app")
     op.execute("grant usage, select on sequence memberships_id_seq to hr_app")
     op.execute("grant usage, select on sequence org_activity_id_seq to hr_app")
+    # Deny-by-default for everyone else (security-privileges.md).
+    op.execute("revoke all on schema public from public")
+    op.execute("revoke all on all tables in schema public from public")
+    op.execute("revoke all on all sequences in schema public from public")
 
     # RLS belt-and-braces: policies deny by default when the GUC is unset, and
     # FORCED means even the table owner is subject to them.

@@ -47,14 +47,20 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-async function errorMessage(res: Response): Promise<string> {
+/** Always throws: turn a non-2xx response into an ApiError. */
+async function throwApiError(res: Response): Promise<never> {
   try {
     const body = (await res.json()) as { detail?: unknown }
     const detail = body.detail
+    // Prefer the machine-readable reason (e.g. PASSWORD_TOO_SHORT) over the
+    // generic code (REGISTER_INVALID_PASSWORD) when one is present.
     if (typeof detail === "string") throw new ApiError(res.status, detail)
     if (detail && typeof detail === "object" && "code" in detail) {
-      const code = (detail as Record<string, unknown>).code
-      if (typeof code === "string") throw new ApiError(res.status, code)
+      const obj = detail as Record<string, unknown>
+      const reason = typeof obj.reason === "string" ? obj.reason : undefined
+      const code = typeof obj.code === "string" ? obj.code : undefined
+      if (reason && reason in PERSIAN_ERRORS) throw new ApiError(res.status, reason)
+      if (code) throw new ApiError(res.status, code)
     }
   } catch (e) {
     if (e instanceof ApiError) throw e
@@ -65,7 +71,7 @@ async function errorMessage(res: Response): Promise<string> {
 export async function fetchMe(): Promise<Me | null> {
   const res = await request("/api/me")
   if (res.status === 401) return null
-  if (!res.ok) throw new Error(await errorMessage(res))
+  if (!res.ok) await throwApiError(res)
   return (await res.json()) as Me
 }
 
@@ -75,7 +81,7 @@ export async function login(email: string, password: string): Promise<void> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ username: email, password }),
   })
-  if (!res.ok) throw await errorMessage(res)
+  if (!res.ok) await throwApiError(res)
 }
 
 export async function signup(input: SignupInput): Promise<Me> {
@@ -84,11 +90,11 @@ export async function signup(input: SignupInput): Promise<Me> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   })
-  if (!res.ok) throw await errorMessage(res)
+  if (!res.ok) await throwApiError(res)
   return (await res.json()) as Me
 }
 
 export async function logout(): Promise<void> {
   const res = await request("/auth/logout", { method: "POST" })
-  if (!res.ok && res.status !== 401) throw await errorMessage(res)
+  if (!res.ok && res.status !== 401) await throwApiError(res)
 }

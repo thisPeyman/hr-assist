@@ -90,7 +90,7 @@ class OrgActivity(Base):
         ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
     )
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("users.id", ondelete="set null"), nullable=True
+        ForeignKey("users.id", ondelete="set null"), nullable=True, index=True
     )
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[dict] = mapped_column(

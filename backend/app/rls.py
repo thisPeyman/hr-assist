@@ -21,5 +21,4 @@ async def set_current_org(session: AsyncSession, org_id: uuid.UUID) -> None:
     ``is_local => true`` keeps the value alive only until the next COMMIT or
     ROLLBACK, so it can never leak onto another pooled connection.
     """
-    session.info[ORG_GUC] = org_id
     await session.execute(_SET_GUC, {"v": str(org_id)})
