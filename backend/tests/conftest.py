@@ -1,21 +1,38 @@
 """Test fixtures: fresh migrated database + app/httpx clients.
 
 Environment is pinned at import time (before ``app`` loads its settings) so the
-test session always targets the throwaway ``hr_test`` database.
+test session always targets the throwaway ``hr_test`` database. The privileged
+URL defaults to the local peer-auth cluster; CI points ``HR_TEST_ADMIN_URL``
+and ``HR_TEST_APP_URL`` at its postgres service container.
 """
 
 import os
+import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 TEST_DB_NAME = "hr_test"
-TEST_SUPERUSER_URL = f"postgresql+asyncpg://peyman@/{TEST_DB_NAME}?host=/var/run/postgresql"
-TEST_APP_URL = "postgresql+asyncpg://hr_app:hr_app_dev@127.0.0.1:5432/hr_test"
+
+_ADMIN_BASE = os.environ.get(
+    "HR_TEST_ADMIN_URL", "postgresql+asyncpg://peyman@/postgres?host=/var/run/postgresql"
+)
+
+
+def _with_db(url: str, dbname: str) -> str:
+    """Swap the database name in a URL without touching its query string."""
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, f"/{dbname}", parts.query, parts.fragment))
+
+
+TEST_SUPERUSER_URL = _with_db(_ADMIN_BASE, TEST_DB_NAME)
+TEST_APP_URL = os.environ.get(
+    "HR_TEST_APP_URL",
+    f"postgresql+asyncpg://hr_app:hr_app_dev@127.0.0.1:5432/{TEST_DB_NAME}",
+)
 
 os.environ["HR_MIGRATION_DATABASE_URL"] = TEST_SUPERUSER_URL
 os.environ["HR_APP_DATABASE_URL"] = TEST_APP_URL
 os.environ["HR_APP_DB_PASSWORD"] = "hr_app_dev"
 os.environ["HR_COOKIE_SECURE"] = "false"
-
-import uuid  # noqa: E402
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
@@ -34,10 +51,7 @@ def migrated_db_url() -> str:
     import asyncio
 
     async def _prepare() -> None:
-        admin = create_async_engine(
-            "postgresql+asyncpg://peyman@/postgres?host=/var/run/postgresql",
-            isolation_level="AUTOCOMMIT",
-        )
+        admin = create_async_engine(_ADMIN_BASE, isolation_level="AUTOCOMMIT")
         async with admin.connect() as conn:
             await conn.execute(
                 text(f"drop database if exists {TEST_DB_NAME} with (force)")
