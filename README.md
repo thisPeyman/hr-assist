@@ -28,6 +28,32 @@ in `.scratch/hr-ai-assistant/` (v1 spec: `spec.md`).
   probes as `hr_app` (`backend/tests/test_rls.py`), and the HTTP signup →
   login → logout → me flow (`backend/tests/test_auth_api.py`).
 
+## Resume ingestion (ticket 11: upload → parse → Candidate)
+
+- **Two-layer pipeline** (spec §7.3): OSS text extraction (pypdf pre-pass →
+  pdfplumber for PDFs; python-docx with a raw-XML fallback for DOCX; TXT
+  trivial) feeding one strict structured-output OpenAI call (Responses API,
+  `json_schema` strict). Model names live in config
+  (`HR_RESUME_EXTRACT_MODEL` / `HR_RESUME_EXTRACT_MODEL_ESCALATION`; defaults
+  `gpt-5.6-luna` → `gpt-6.1-sol`), prompts in versioned files
+  (`app/parsing/prompts/`), and every row stores `model` + `prompt_version`
+  + `schema_version`. Set `HR_OPENAI_API_KEY` to enable the paid step.
+- **Nothing dropped silently**: every submitted document ends in an explicit
+  terminal status — `extracted`, `needs_review`, `failed`, `not_a_resume`
+  (`ocr_applied`/`vision_used` ship in the enum for ticket 21). The retry
+  ladder is pydantic validation → one repair-retry on the same model →
+  escalation → `needs_review`.
+- **Queue**: a Postgres jobs table claimed with `SELECT … FOR UPDATE SKIP
+  LOCKED` (no Redis/Celery). Single uploads run the pipeline inline (sync
+  path, sub-minute UX); a background loop in the app lifespan drains the
+  rest. RLS stays strict except one SELECT-only policy exposing *pending*
+  job rows so workers can claim across Orgs before pinning one.
+- **Retention + dedupe**: original bytes, raw text, and raw model JSON are
+  kept (`resume_files`/`resume_extractions`); identical files dedupe by
+  SHA-256 per org. Extraction values stay verbatim in the resume's own
+  language; dates normalize to ISO prefixes only when confidently Gregorian
+  and render as Jalali at the presentation layer (`frontend/src/lib/profile.ts`).
+
 ## Local setup
 
 Requirements: Python 3.14 ([uv](https://docs.astral.sh/uv/)), Node 22,

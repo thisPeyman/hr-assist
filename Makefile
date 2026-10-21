@@ -2,10 +2,10 @@
 
 help:
 	@echo "backend-lint    ruff over app/tests/migrations"
-	@echo "backend-test    schema + RLS + API tests (needs local Postgres)"
+	@echo "backend-test    schema + RLS + pipeline + worker + API tests (needs local Postgres)"
 	@echo "frontend-lint   oxlint"
 	@echo "frontend-build  typecheck + vite build"
-	@echo "frontend-test   vitest (Jalali utilities)"
+	@echo "frontend-test   vitest (Jalali + profile display utilities)"
 	@echo "ci              everything CI runs, in order"
 
 backend-lint:

@@ -1,16 +1,25 @@
-"""API routes: signup (ours), login/logout (fastapi-users), /api/me."""
+"""API routes: signup (ours), login/logout (fastapi-users), /api/me,
+and ticket 11's ingest + Talent Pool endpoints."""
 
+import hashlib
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, status
 from fastapi_users import InvalidPasswordException
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
 from fastapi_users.exceptions import UserAlreadyExists
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.db import get_session
+from app.models import Candidate, ParseJob, ResumeFile
+from app.parsing.extract_text import sniff_kind
+from app.parsing.llm import ResumeExtractor, get_extractor
+from app.parsing.pipeline import process_parse_job
 from app.tenancy import TenantContextDep, load_membership_with_org
 from app.users import (
     SESSION_COOKIE_ATTRS,
@@ -106,6 +115,250 @@ async def me(ctx: TenantContextDep) -> MeResponse:
         email=ctx.user.email,
         org=OrgOut(id=ctx.org.id, name=ctx.org.name, slug=ctx.org.slug),
         role=ctx.membership.role.value,
+    )
+
+
+# --------------------------------------------------------------------------
+# Ticket 11 — upload → parse → Candidate in the Talent Pool (spec §7.2–7.3)
+# --------------------------------------------------------------------------
+
+
+class JobOut(BaseModel):
+    id: UUID
+    status: str
+    reason: str | None
+    attempts: int
+    model: str | None
+    prompt_version: str | None
+    schema_version: int | None
+
+
+class CandidateSummary(BaseModel):
+    id: UUID
+    full_name: str
+    headline: str | None
+    email: str | None
+    created_at: datetime
+
+
+class ResumeOut(BaseModel):
+    id: UUID
+    filename: str
+    parse_status: str
+    parse_reason: str | None
+    uploaded_at: datetime
+
+
+class CandidateDetail(CandidateSummary):
+    phone: str | None
+    location: str | None
+    profile: dict | None
+    resume: ResumeOut | None
+
+
+class CandidateList(BaseModel):
+    items: list[CandidateSummary]
+
+
+class UploadOutcome(BaseModel):
+    duplicate: bool
+    job: JobOut | None
+    candidate: CandidateSummary | None
+
+
+_MIME_BY_KIND = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain",
+}
+
+
+def _job_out(job: ParseJob) -> JobOut:
+    return JobOut(
+        id=job.id,
+        status=job.status.value,
+        reason=job.reason,
+        attempts=job.attempts,
+        model=job.model,
+        prompt_version=job.prompt_version,
+        schema_version=job.schema_version,
+    )
+
+
+async def _latest_job(session: AsyncSession, resume_file_id: UUID) -> ParseJob | None:
+    return (
+        await session.execute(
+            select(ParseJob)
+            .where(ParseJob.resume_file_id == resume_file_id)
+            .order_by(ParseJob.created_at.desc(), ParseJob.id.desc())
+            .limit(1)
+        )
+    ).scalar()
+
+
+def _summary(candidate: Candidate) -> CandidateSummary:
+    return CandidateSummary(
+        id=candidate.id,
+        full_name=candidate.full_name,
+        headline=candidate.headline,
+        email=candidate.email,
+        created_at=candidate.created_at,
+    )
+
+
+@api_router.post(
+    "/candidates/upload",
+    status_code=status.HTTP_201_CREATED,
+    response_model=UploadOutcome,
+    name="api:candidates:upload",
+)
+async def upload_resume(
+    ctx: TenantContextDep,
+    file: UploadFile,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    extractor: Annotated[ResumeExtractor, Depends(get_extractor)],
+) -> UploadOutcome:
+    """GUI upload — the sync path for sub-minute UX on single uploads (spec §7.2).
+
+    The job runs inline inside this request's transaction; every path ends in
+    an explicit terminal status the response reports (nothing dropped).
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="EMPTY_FILE")
+    if len(data) > settings.resume_max_bytes:
+        raise HTTPException(status_code=413, detail="FILE_TOO_LARGE")
+
+    sha256 = hashlib.sha256(data).hexdigest()
+    existing = (
+        await session.execute(
+            select(ResumeFile).where(
+                ResumeFile.org_id == ctx.org.id, ResumeFile.sha256 == sha256
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        # Identical file: SHA-256 dedupe — the earlier terminal judgment
+        # stands; never a duplicate Candidate (spec §7.3).
+        candidate = (
+            await session.get(Candidate, existing.candidate_id)
+            if existing.candidate_id is not None
+            else None
+        )
+        job = await _latest_job(session, existing.id)
+        return UploadOutcome(
+            duplicate=True,
+            job=_job_out(job) if job is not None else None,
+            candidate=_summary(candidate) if candidate is not None else None,
+        )
+
+    try:
+        mime = _MIME_BY_KIND[sniff_kind(data, file.filename or "")]
+    except Exception:  # noqa: BLE001 — unsupported formats ride the pipeline
+        mime = "application/octet-stream"  # to an explicit needs_review
+
+    resume = ResumeFile(
+        org_id=ctx.org.id,
+        original_filename=file.filename or "resume",
+        mime_type=mime,
+        sha256=sha256,
+        bytes=data,
+    )
+    session.add(resume)
+    await session.flush()
+
+    job = ParseJob(org_id=ctx.org.id, resume_file_id=resume.id)
+    session.add(job)
+    await session.flush()
+
+    await process_parse_job(
+        session, job, resume, extractor=extractor, actor_user_id=ctx.user.id
+    )
+    # Read within the request transaction: the tenant GUC is transaction-local
+    # and the RLS policy would hide the row after commit.
+    candidate = (
+        await session.get(Candidate, resume.candidate_id)
+        if resume.candidate_id is not None
+        else None
+    )
+    summary = _summary(candidate) if candidate is not None else None
+    await session.commit()
+
+    return UploadOutcome(
+        duplicate=False,
+        job=_job_out(job),
+        candidate=summary,
+    )
+
+
+@api_router.get("/candidates", response_model=CandidateList, name="api:candidates:list")
+async def list_candidates(
+    ctx: TenantContextDep,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CandidateList:
+    candidates = (
+        (
+            await session.execute(
+                select(Candidate)
+                .where(Candidate.org_id == ctx.org.id)
+                .order_by(Candidate.created_at.desc(), Candidate.id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return CandidateList(items=[_summary(candidate) for candidate in candidates])
+
+
+@api_router.get(
+    "/candidates/{candidate_id}",
+    response_model=CandidateDetail,
+    name="api:candidates:detail",
+)
+async def get_candidate(
+    candidate_id: UUID,
+    ctx: TenantContextDep,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CandidateDetail:
+    candidate = (
+        await session.execute(
+            select(Candidate).where(
+                Candidate.id == candidate_id, Candidate.org_id == ctx.org.id
+            )
+        )
+    ).scalar_one_or_none()
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="CANDIDATE_NOT_FOUND")
+
+    resume = (
+        await session.execute(
+            select(ResumeFile)
+            .where(ResumeFile.candidate_id == candidate.id)
+            .order_by(ResumeFile.created_at.desc(), ResumeFile.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    resume_out: ResumeOut | None = None
+    if resume is not None:
+        job = await _latest_job(session, resume.id)
+        resume_out = ResumeOut(
+            id=resume.id,
+            filename=resume.original_filename,
+            parse_status=job.status.value if job is not None else "pending",
+            parse_reason=job.reason if job is not None else None,
+            uploaded_at=resume.created_at,
+        )
+
+    return CandidateDetail(
+        id=candidate.id,
+        full_name=candidate.full_name,
+        headline=candidate.headline,
+        email=candidate.email,
+        created_at=candidate.created_at,
+        phone=candidate.phone,
+        location=candidate.location,
+        profile=candidate.profile,
+        resume=resume_out,
     )
 
 

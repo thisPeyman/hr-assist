@@ -28,5 +28,17 @@ class Settings(BaseSettings):
     # Where `vite build` output lives, served by FastAPI when present.
     frontend_dist: str = "../frontend/dist"
 
+    # --- Resume parsing (ticket 11, spec §7.3) ---
+    # Model names live in config, never in code (spec §4.5): workhorse and
+    # escalation tier for the one strict structured-output call.
+    openai_api_key: str = ""
+    resume_extract_model: str = "gpt-5.6-luna"
+    resume_extract_model_escalation: str = "gpt-6.1-sol"
+    resume_extract_confidence_threshold: float = 0.6
+    resume_text_cap_chars: int = 24_000
+    resume_max_bytes: int = 10 * 1024 * 1024
+    # Poll cadence for the Postgres jobs-table worker loop.
+    worker_poll_seconds: float = 1.0
+
 
 settings = Settings()

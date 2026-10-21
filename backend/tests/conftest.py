@@ -79,7 +79,11 @@ async def clean_tables(superuser_engine):
     yield
     async with superuser_engine.begin() as conn:
         await conn.execute(
-            text("truncate table access_tokens, memberships, org_activity, orgs, users cascade")
+            text(
+                "truncate table access_tokens, memberships, org_activity, orgs, users,"
+                " resume_extractions, parse_jobs, resume_files,"
+                " candidate_activity, candidates cascade"
+            )
         )
 
 
@@ -89,6 +93,52 @@ async def app_engine():
     engine = create_async_engine(TEST_APP_URL)
     yield engine
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def app_session_factory(app_engine):
+    """Session factory bound to the hr_app engine (RLS-active)."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    return async_sessionmaker(app_engine, expire_on_commit=False)
+
+
+async def seed_org_with_admin(session_factory) -> tuple[str, str]:
+    """A minimal (org_id, user_id) pair for pipeline/queue tests."""
+    import uuid
+
+    marker = uuid.uuid4().hex[:8]
+    async with session_factory() as session:
+        from sqlalchemy import text
+
+        user_id = (
+            (
+                await session.execute(
+                    text(
+                        "insert into users (email, hashed_password) "
+                        "values (:e, 'x') returning id"
+                    ),
+                    {"e": f"hr-{marker}@example.com"},
+                )
+            ).scalar(),
+        )[0]
+        org_id = (
+            (
+                await session.execute(
+                    text("insert into orgs (name, slug) values ('تست', :s) returning id"),
+                    {"s": f"org-{marker}"},
+                )
+            ).scalar(),
+        )[0]
+        await session.execute(
+            text(
+                "insert into memberships (user_id, org_id, role) "
+                "values (:u, :o, 'admin')"
+            ),
+            {"u": str(user_id), "o": str(org_id)},
+        )
+        await session.commit()
+    return str(org_id), str(user_id)
 
 
 @pytest_asyncio.fixture

@@ -19,8 +19,11 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Identity,
+    Integer,
+    LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -35,6 +38,9 @@ class Base(DeclarativeBase):
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
 
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -43,7 +49,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 class Org(Base):
     __tablename__ = "orgs"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
+    )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -114,4 +122,189 @@ class AccessToken(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+# --------------------------------------------------------------------------
+# Ticket 11 — upload → parse → Candidate in the Talent Pool (spec §5, §12)
+# --------------------------------------------------------------------------
+
+
+class Candidate(Base):
+    """A person + Profile in the org-wide Talent Pool (GLOSSARY)."""
+
+    __tablename__ = "candidates"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    headline: Mapped[str | None] = mapped_column(Text)
+    email: Mapped[str | None] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(Text)
+    # Structured, HR-editable Profile (GLOSSARY) — raw model JSON lives in
+    # resume_extractions; this is the reviewed source of truth.
+    profile: Mapped[dict | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class CandidateActivity(Base):
+    """Candidate-level Activity — append-only system events (GLOSSARY)."""
+
+    __tablename__ = "candidate_activity"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidates.id", ondelete="cascade"), nullable=False, index=True
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="set null"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    data: Mapped[dict] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResumeFile(Base):
+    """An uploaded resume: original bytes kept verbatim, deduped by SHA-256."""
+
+    __tablename__ = "resume_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    # Linked once the parse creates the Candidate (column-level grant).
+    candidate_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("candidates.id", ondelete="set null"), nullable=True, index=True
+    )
+    original_filename: Mapped[str] = mapped_column(Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("org_id", "sha256", name="resume_files_org_sha_key"),
+    )
+
+
+class ParseJobStatus(enum.Enum):
+    """Every submitted document ends in an explicit terminal status (spec §4.2).
+    ocr_applied/vision_used are recorded by ticket 21's routes; the enum ships
+    complete so it never needs an ALTER."""
+
+    PENDING = "pending"
+    EXTRACTED = "extracted"
+    OCR_APPLIED = "ocr_applied"
+    VISION_USED = "vision_used"
+    NEEDS_REVIEW = "needs_review"
+    FAILED = "failed"
+    NOT_A_RESUME = "not_a_resume"
+
+
+class ParseJob(Base):
+    """One unit of parse work on the Postgres jobs table (spec §7.3)."""
+
+    __tablename__ = "parse_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    resume_file_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("resume_files.id", ondelete="cascade"), nullable=False, index=True
+    )
+    status: Mapped[ParseJobStatus] = mapped_column(
+        Enum(
+            ParseJobStatus,
+            name="parse_job_status",
+            values_callable=lambda e: [i.value for i in e],
+        ),
+        nullable=False,
+        default=ParseJobStatus.PENDING,
+    )
+    attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    # Model/prompt/schema provenance per row (spec §7.3) — never load-bearing
+    # in code (spec §4.5).
+    model: Mapped[str | None] = mapped_column(Text)
+    prompt_version: Mapped[str | None] = mapped_column(Text)
+    schema_version: Mapped[int | None] = mapped_column(Integer)
+    reason: Mapped[str | None] = mapped_column(Text)  # terminal why, if not extracted
+    extract_ms: Mapped[int | None] = mapped_column(Integer)
+    llm_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResumeExtraction(Base):
+    """Raw text + raw model JSON kept for replay/re-parse campaigns (spec §7.3)."""
+
+    __tablename__ = "resume_extractions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    parse_job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("parse_jobs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    resume_file_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("resume_files.id", ondelete="cascade"), nullable=False, index=True
+    )
+    raw_text: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[dict | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite")
+    )
+    model: Mapped[str | None] = mapped_column(Text)
+    prompt_version: Mapped[str | None] = mapped_column(Text)
+    schema_version: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
