@@ -3,7 +3,7 @@
 
 
 def extraction_payload(**overrides) -> dict:
-    """A complete, valid ResumeExtraction wire payload (mixed Persian/English,
+    """A complete, valid ResumeExtractionData wire payload (mixed Persian/English,
     verbatim values) that tests can override per-case."""
     payload = {
         "is_resume": True,

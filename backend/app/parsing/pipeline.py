@@ -42,7 +42,7 @@ async def process_parse_job(
     resume_file: ResumeFile,
     *,
     extractor: ResumeExtractor,
-    actor_user_id: uuid.UUID | str | None = None,
+    actor_user_id: uuid.UUID | None = None,
 ) -> ParseJobStatus:
     """Run one job inside the caller's transaction; returns the terminal status.
 
@@ -65,7 +65,7 @@ async def _process(
     resume_file: ResumeFile,
     *,
     extractor: ResumeExtractor,
-    actor_user_id: uuid.UUID | str | None,
+    actor_user_id: uuid.UUID | None,
 ) -> ParseJobStatus:
     # ---- Layer 1: OSS text extraction (free, local) ------------------------
     started = time.monotonic()
@@ -103,6 +103,9 @@ async def _process(
         _finish(job, ParseJobStatus.FAILED, reason=f"api_error:{outcome.error}")
         return job.status
     if outcome.kind == "invalid":
+        # Keep whatever the model did emit: the needs_review queue (ticket 20)
+        # shows the document plus the partial payload.
+        extraction_row.raw_json = outcome.raw_json
         _finish(job, ParseJobStatus.NEEDS_REVIEW, reason="validation_failed")
         return job.status
 
@@ -148,10 +151,6 @@ async def _process(
     await session.flush()  # candidate.id for the link + activity
 
     resume_file.candidate_id = candidate.id
-    if actor_user_id is not None:
-        actor_user_id = (
-            uuid.UUID(actor_user_id) if isinstance(actor_user_id, str) else actor_user_id
-        )
     session.add(
         CandidateActivity(
             org_id=job.org_id,

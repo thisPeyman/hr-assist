@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from app.parsing.schema import (
     SCHEMA_VERSION,
-    ResumeExtraction,
+    ResumeExtractionData,
     build_profile,
     strict_json_schema,
 )
@@ -65,13 +65,13 @@ def valid_payload(**overrides) -> dict:
 
 class TestValidation:
     def test_full_payload_validates_verbatim(self):
-        extraction = ResumeExtraction.model_validate(valid_payload())
+        extraction = ResumeExtractionData.model_validate(valid_payload())
         assert extraction.contact.full_name == "پیمان رضایی"
         assert extraction.work_experience[0].company == "دیجی‌کالا"
         assert extraction.skills == ["Python", "PostgreSQL", "Docker"]
 
     def test_minimal_payload_validates(self):
-        extraction = ResumeExtraction.model_validate(
+        extraction = ResumeExtractionData.model_validate(
             {
                 "is_resume": True,
                 "confidence": 0.5,
@@ -95,13 +95,13 @@ class TestValidation:
         payload = valid_payload()
         del payload["is_resume"]
         with pytest.raises(ValidationError):
-            ResumeExtraction.model_validate(payload)
+            ResumeExtractionData.model_validate(payload)
 
     def test_confidence_out_of_range_rejected(self):
         """Out-of-range confidence is exactly what the repair-retry ladder
         catches before any Candidate is created."""
         with pytest.raises(ValidationError):
-            ResumeExtraction.model_validate(valid_payload(confidence=1.5))
+            ResumeExtractionData.model_validate(valid_payload(confidence=1.5))
 
 
 class TestStrictJsonSchema:
@@ -170,8 +170,13 @@ class TestDateNormalization:
             ("March 2020", "2020-03"),
             ("SEPTEMBER 2019", "2019-09"),
             # Persian-calendar dates are already Jalali — verbatim, never
-            # reinterpreted as Gregorian
+            # reinterpreted as Gregorian. Regression: \d matches Persian
+            # digits, so these MUST NOT match the ISO patterns (a match would
+            # rewrite «۱۴۰۱/۰۵» into the mongrel «۱۴۰۱-05»).
             ("مهر ۱۴۰۱", "مهر ۱۴۰۱"),
+            ("۱۴۰۱/۰۵", "۱۴۰۱/۰۵"),
+            ("۱۴۰۱-۰۵-۱۵", "۱۴۰۱-۰۵-۱۵"),
+            ("۱۳۹۸", "۱۳۹۸"),
             ("۱۳۹۸/۱۰/۰۵", "۱۳۹۸/۱۰/۰۵"),
             ("1398-10-05", "1398-10-05"),
             ("Present", "Present"),
@@ -184,13 +189,13 @@ class TestDateNormalization:
     def test_date_forms(self, raw, expected):
         payload = valid_payload()
         payload["work_experience"][0]["start_date"] = raw
-        profile = build_profile(ResumeExtraction.model_validate(payload))
+        profile = build_profile(ResumeExtractionData.model_validate(payload))
         assert profile["work_experience"][0]["start_date"] == expected
 
 
 class TestProfile:
     def test_profile_carries_structured_fields_verbatim(self):
-        profile = build_profile(ResumeExtraction.model_validate(valid_payload()))
+        profile = build_profile(ResumeExtractionData.model_validate(valid_payload()))
         assert profile["contact"]["full_name"] == "پیمان رضایی"
         assert profile["skills"] == ["Python", "PostgreSQL", "Docker"]
         assert profile["industries"] == ["فین‌تک", "e-commerce"]
@@ -207,5 +212,5 @@ class TestProfile:
     def test_profile_dates_normalized(self):
         payload = valid_payload()
         payload["work_experience"][0]["start_date"] = "Jan 2020"
-        profile = build_profile(ResumeExtraction.model_validate(payload))
+        profile = build_profile(ResumeExtractionData.model_validate(payload))
         assert profile["work_experience"][0]["start_date"] == "2020-01"

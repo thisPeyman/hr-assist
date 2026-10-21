@@ -3,6 +3,8 @@ explicit terminal status; a Candidate appears in the Talent Pool when — and
 only when — the parse produced a trustworthy identity (spec §4.2, §7.3).
 """
 
+import uuid
+
 import sqlalchemy as sa
 
 from app.models import (
@@ -88,7 +90,7 @@ class TestHappyPath:
                 job,
                 resume,
                 extractor=FakeExtractor([extraction_payload()]),
-                actor_user_id=user_id,
+                actor_user_id=uuid.UUID(user_id),
             )
             await session.commit()
 
@@ -261,12 +263,14 @@ class TestTerminalStatuses:
         assert job.reason == "validation_failed"
         assert job.attempts == 3
         # Raw text is kept even when the model never produced valid JSON —
-        # the needs_review queue (ticket 20) shows the document.
+        # and so is the last (invalid) payload: the needs_review queue
+        # (ticket 20) shows the document and whatever the model did emit.
         async with app_session_factory() as session:
             await set_current_org(session, org_id)
             row = (await session.execute(sa.select(ResumeExtraction))).scalar_one()
             assert "پیمان رضایی" in row.raw_text
-            assert row.raw_json is None
+            assert row.raw_json is not None
+            assert row.raw_json["contact"]["full_name"] == "پیمان رضایی"
 
     async def test_api_failure_is_failed_not_dropped(self, app_session_factory):
         from tests.conftest import seed_org_with_admin

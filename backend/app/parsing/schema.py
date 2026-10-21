@@ -2,7 +2,7 @@
 
 Three representations of one contract, deliberately kept together:
 
-- :class:`ResumeExtraction` — the pydantic validator. Everything is optional
+- :class:`ResumeExtractionData` — the pydantic validator. Everything is optional
   (nullable) except the routing triple ``is_resume``/``confidence``/
   ``needs_review``: the pipeline degrades, it never crashes on partial data.
 - :func:`strict_json_schema` — the OpenAI wire format. Strict structured
@@ -38,10 +38,12 @@ _ENGLISH_MONTHS = {
     "dec": 12,
 }
 
-_ISO_DAY = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
-_ISO_MONTH = re.compile(r"^(\d{4})[-/](\d{1,2})$")
-_YEAR = re.compile(r"^(\d{4})$")
-_ENGLISH_MONTH_YEAR = re.compile(r"^([A-Za-z]+)\.? (\d{4})$")
+# [0-9] (not \d): \d also matches Persian digits, and a Jalali date like
+# «۱۴۰۱/۰۵» must never match a "confidently Gregorian" pattern.
+_ISO_DAY = re.compile(r"^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})$")
+_ISO_MONTH = re.compile(r"^([0-9]{4})[-/]([0-9]{1,2})$")
+_YEAR = re.compile(r"^([0-9]{4})$")
+_ENGLISH_MONTH_YEAR = re.compile(r"^([A-Za-z]+)\.? ([0-9]{4})$")
 
 
 def normalize_date(value: str | None) -> str | None:
@@ -134,8 +136,12 @@ class Language(BaseModel):
     proficiency: str | None = None
 
 
-class ResumeExtraction(BaseModel):
-    """Wire contract for the one structured-output call (research 02 §4)."""
+class ResumeExtractionData(BaseModel):
+    """Wire contract for the one structured-output call (research 02 §4).
+
+    Named …Data to stay distinct from the ORM's ``ResumeExtraction`` row
+    (app.models) — same domain concept, different layers.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -162,7 +168,7 @@ class ResumeExtraction(BaseModel):
 
 def strict_json_schema() -> dict:
     """Pydantic's schema, converted for OpenAI strict structured outputs."""
-    schema = ResumeExtraction.model_json_schema()
+    schema = ResumeExtractionData.model_json_schema()
     return _to_strict(schema, defs=schema.get("$defs", {}))
 
 
@@ -219,39 +225,36 @@ def _to_strict(node: dict, defs: dict) -> dict:
 # --------------------------------------------------------------------------
 
 
-def build_profile(extraction: ResumeExtraction) -> dict:
+def _dated(model: BaseModel, *date_fields: str) -> dict:
+    """model_dump with the date fields normalized — work experience,
+    education, and certifications all share this shape."""
+    dump = model.model_dump(exclude=set(date_fields))
+    for field in date_fields:
+        dump[field] = normalize_date(getattr(model, field))
+    return dump
+
+
+def build_profile(extraction: ResumeExtractionData) -> dict:
     """The structured, HR-editable Profile of a Candidate's latest resume.
 
     Routing fields (is_resume/confidence/needs_review) stay on the parse job;
     the Profile carries only what HR sees and edits. Dates normalize here —
     the raw model JSON is never mutated (re-parse campaigns stay possible).
     """
-    contact = extraction.contact.model_dump()
     return {
-        "contact": contact,
+        "contact": extraction.contact.model_dump(),
         "headline": extraction.headline,
         "summary": extraction.summary,
         "work_experience": [
-            {
-                **job.model_dump(exclude={"start_date", "end_date"}),
-                "start_date": normalize_date(job.start_date),
-                "end_date": normalize_date(job.end_date),
-            }
-            for job in extraction.work_experience
+            _dated(job, "start_date", "end_date") for job in extraction.work_experience
         ],
         "education": [
-            {
-                **item.model_dump(exclude={"start_date", "end_date"}),
-                "start_date": normalize_date(item.start_date),
-                "end_date": normalize_date(item.end_date),
-            }
-            for item in extraction.education
+            _dated(item, "start_date", "end_date") for item in extraction.education
         ],
         "skills": extraction.skills,
         "industries": extraction.industries,
         "certifications": [
-            {**cert.model_dump(exclude={"date"}), "date": normalize_date(cert.date)}
-            for cert in extraction.certifications
+            _dated(cert, "date") for cert in extraction.certifications
         ],
         "languages": [lang.model_dump() for lang in extraction.languages],
         "document_language": extraction.document_language,
@@ -261,7 +264,7 @@ def build_profile(extraction: ResumeExtraction) -> dict:
 
 __all__ = [
     "SCHEMA_VERSION",
-    "ResumeExtraction",
+    "ResumeExtractionData",
     "ValidationError",
     "build_profile",
     "normalize_date",

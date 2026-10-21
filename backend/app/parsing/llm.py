@@ -18,13 +18,17 @@ Model names come from config, prompts from versioned files (spec §4.5).
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import ValidationError
 
 from app.config import settings
 from app.parsing.prompt import PROMPT_VERSION, load_system_prompt
-from app.parsing.schema import SCHEMA_VERSION, ResumeExtraction, strict_json_schema
+from app.parsing.schema import (
+    SCHEMA_VERSION,
+    ResumeExtractionData,
+    strict_json_schema,
+)
 
 _MAX_REPAIR_ERRORS = 8
 
@@ -106,13 +110,13 @@ async def get_extractor() -> ResumeExtractor:
 
 @dataclass
 class LadderOutcome:
-    kind: str  # "ok" | "invalid" | "api_error"
+    kind: Literal["ok", "invalid", "api_error"]
     attempts: int = 0
     model: str | None = None
     prompt_version: str = PROMPT_VERSION
     schema_version: int = SCHEMA_VERSION
-    extraction: ResumeExtraction | None = None
-    raw_json: dict | None = None
+    extraction: ResumeExtractionData | None = None
+    raw_json: dict | None = None  # last payload — kept even when invalid
     error: str | None = None
     validation_errors: list[str] = field(default_factory=list)
 
@@ -164,11 +168,12 @@ async def run_extraction_ladder(
             continue
 
         try:
-            extraction = ResumeExtraction.model_validate(payload)
+            extraction = ResumeExtractionData.model_validate(payload)
         except ValidationError as exc:
             errors.extend(_short_errors(exc))
             outcome.model = model
             outcome.attempts += 1
+            outcome.raw_json = payload  # partial data for the review queue
             continue
 
         return LadderOutcome(

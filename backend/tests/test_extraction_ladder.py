@@ -74,6 +74,9 @@ class TestRepairLadder:
         assert outcome.kind == "invalid"
         assert outcome.attempts == 3
         assert outcome.model == settings.resume_extract_model_escalation
+        assert outcome.validation_errors, "errors feed ticket-20 review context"
+        # The last (invalid) payload is kept — partial data for the queue.
+        assert outcome.raw_json == invalid_payload()
 
 
 class TestTransportErrors:

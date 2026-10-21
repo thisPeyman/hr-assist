@@ -12,6 +12,7 @@ from fastapi_users.authentication.strategy.db import DatabaseStrategy
 from fastapi_users.exceptions import UserAlreadyExists
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -221,7 +222,10 @@ async def upload_resume(
     """GUI upload — the sync path for sub-minute UX on single uploads (spec §7.2).
 
     The job runs inline inside this request's transaction; every path ends in
-    an explicit terminal status the response reports (nothing dropped).
+    an explicit terminal status the response reports. A document counts as
+    submitted only once the request succeeds — a failed/interrupted request
+    persists nothing and the user still holds the file (the durable-write-first
+    contract in spec §7.1 belongs to email-in, where the sender is gone).
     """
     data = await file.read()
     if not data:
@@ -230,42 +234,65 @@ async def upload_resume(
         raise HTTPException(status_code=413, detail="FILE_TOO_LARGE")
 
     sha256 = hashlib.sha256(data).hexdigest()
-    existing = (
+    try:
+        mime = _MIME_BY_KIND[sniff_kind(data, file.filename or "")]
+    except Exception:  # noqa: BLE001 — unsupported formats ride the pipeline
+        mime = "application/octet-stream"  # to an explicit needs_review
+
+    duplicate: ResumeFile | None = (
         await session.execute(
             select(ResumeFile).where(
                 ResumeFile.org_id == ctx.org.id, ResumeFile.sha256 == sha256
             )
         )
     ).scalar_one_or_none()
-    if existing is not None:
+
+    resume: ResumeFile | None = None
+    if duplicate is None:
+        # Race-free dedupe: two concurrent uploads of the same file both pass
+        # the SELECT above — the unique index decides, and the loser sees no
+        # row returned and takes the duplicate path (spec §7.3).
+        inserted_id = (
+            await session.execute(
+                pg_insert(ResumeFile)
+                .values(
+                    org_id=ctx.org.id,
+                    original_filename=file.filename or "resume",
+                    mime_type=mime,
+                    sha256=sha256,
+                    bytes=data,
+                )
+                .on_conflict_do_nothing(index_elements=["org_id", "sha256"])
+                .returning(ResumeFile.id)
+            )
+        ).scalar()
+        if inserted_id is not None:
+            resume = await session.get(ResumeFile, inserted_id)
+        else:  # lost the insert race
+            duplicate = (
+                await session.execute(
+                    select(ResumeFile).where(
+                        ResumeFile.org_id == ctx.org.id, ResumeFile.sha256 == sha256
+                    )
+                )
+            ).scalar_one()
+
+    if duplicate is not None:
         # Identical file: SHA-256 dedupe — the earlier terminal judgment
         # stands; never a duplicate Candidate (spec §7.3).
         candidate = (
-            await session.get(Candidate, existing.candidate_id)
-            if existing.candidate_id is not None
+            await session.get(Candidate, duplicate.candidate_id)
+            if duplicate.candidate_id is not None
             else None
         )
-        job = await _latest_job(session, existing.id)
+        job = await _latest_job(session, duplicate.id)
         return UploadOutcome(
             duplicate=True,
             job=_job_out(job) if job is not None else None,
             candidate=_summary(candidate) if candidate is not None else None,
         )
 
-    try:
-        mime = _MIME_BY_KIND[sniff_kind(data, file.filename or "")]
-    except Exception:  # noqa: BLE001 — unsupported formats ride the pipeline
-        mime = "application/octet-stream"  # to an explicit needs_review
-
-    resume = ResumeFile(
-        org_id=ctx.org.id,
-        original_filename=file.filename or "resume",
-        mime_type=mime,
-        sha256=sha256,
-        bytes=data,
-    )
-    session.add(resume)
-    await session.flush()
+    assert resume is not None  # inserted above, or the duplicate path returned
 
     job = ParseJob(org_id=ctx.org.id, resume_file_id=resume.id)
     session.add(job)
@@ -350,11 +377,7 @@ async def get_candidate(
         )
 
     return CandidateDetail(
-        id=candidate.id,
-        full_name=candidate.full_name,
-        headline=candidate.headline,
-        email=candidate.email,
-        created_at=candidate.created_at,
+        **_summary(candidate).model_dump(),
         phone=candidate.phone,
         location=candidate.location,
         profile=candidate.profile,

@@ -9,6 +9,7 @@
  */
 
 import { formatJalali, toPersianDigits } from "./jalali"
+import type { ParseJobInfo } from "./api"
 
 // Backend normalization emits: YYYY | YYYY-MM | YYYY-MM-DD — confidently
 // Gregorian. Anything else is a verbatim fragment from the resume.
@@ -56,7 +57,7 @@ export function formatDateRange(
   return null
 }
 
-const STATUS_LABELS: Record<string, string> = {
+const STATUS_LABELS: Record<ParseJobInfo["status"], string> = {
   pending: "در صف پردازش",
   extracted: "استخراج شد",
   ocr_applied: "استخراج با OCR",
@@ -81,8 +82,11 @@ const REASON_LABELS: Record<string, string> = {
 }
 
 /** Parse status (+ optional reason) as a Persian, human label. */
-export function parseStatusLabel(status: string, reason?: string | null): string {
-  const base = STATUS_LABELS[status] ?? status
+export function parseStatusLabel(
+  status: ParseJobInfo["status"],
+  reason?: string | null
+): string {
+  const base = STATUS_LABELS[status]
   const detail = reason ? REASON_LABELS[reason] : undefined
   return detail ? `${base} — ${detail}` : base
 }
