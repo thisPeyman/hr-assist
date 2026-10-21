@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from "react-router"
 
 import { useAuth } from "@/auth"
+import { CandidatePage } from "@/pages/candidate"
 import { HomePage } from "@/pages/home"
 import { LoginPage } from "@/pages/login"
+import { PoolPage } from "@/pages/pool"
 import { SignupPage } from "@/pages/signup"
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -31,6 +33,22 @@ export default function App() {
       />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route
+        path="/pool"
+        element={
+          <Protected>
+            <PoolPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/candidates/:id"
+        element={
+          <Protected>
+            <CandidatePage />
+          </Protected>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
