@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type DragEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { Link } from "react-router"
 import { FileUpIcon, LoaderCircleIcon, UsersIcon } from "lucide-react"
 
@@ -201,6 +201,7 @@ function CandidateRow({ candidate }: { candidate: CandidateSummary }) {
 export function PoolPage() {
   const [candidates, setCandidates] = useState<CandidateSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const requested = useRef(false)
 
   const load = useCallback(async () => {
     try {
@@ -209,6 +210,14 @@ export function PoolPage() {
       setError(persianError(e))
     }
   }, [])
+
+  // Fetch the pool on mount. React 18 StrictMode double-invokes effects in
+  // dev; the ref guard keeps that to one request.
+  useEffect(() => {
+    if (requested.current) return
+    requested.current = true
+    void load()
+  }, [load])
 
   if (error) {
     return (
