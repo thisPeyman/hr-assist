@@ -62,7 +62,9 @@ class OpenAIResumeExtractor:
             from openai import AsyncOpenAI
 
             self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key, timeout=60.0
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_base_url,
+                timeout=60.0,
             )
         messages: list[dict] = []
         if repair:

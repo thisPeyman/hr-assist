@@ -30,8 +30,10 @@ class Settings(BaseSettings):
 
     # --- Resume parsing (ticket 11, spec §7.3) ---
     # Model names live in config, never in code (spec §4.5): workhorse and
-    # escalation tier for the one strict structured-output call.
+    # escalation tier for the one strict structured-output call. base_url
+    # points the SDK at a gateway when one is in use.
     openai_api_key: str = ""
+    openai_base_url: str | None = None
     resume_extract_model: str = "gpt-5.6-luna"
     resume_extract_model_escalation: str = "gpt-6.1-sol"
     resume_extract_confidence_threshold: float = 0.6
