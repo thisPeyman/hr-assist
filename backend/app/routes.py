@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_session
-from app.models import Candidate, ParseJob, ResumeFile
+from app.models import Candidate, ParseJob, ParseJobStatus, ResumeFile
 from app.parsing.extract_text import sniff_kind
 from app.parsing.llm import ResumeExtractor, get_extractor
 from app.parsing.pipeline import process_parse_job
@@ -222,10 +222,10 @@ async def upload_resume(
     """GUI upload — the sync path for sub-minute UX on single uploads (spec §7.2).
 
     The job runs inline inside this request's transaction; every path ends in
-    an explicit terminal status the response reports. A document counts as
-    submitted only once the request succeeds — a failed/interrupted request
-    persists nothing and the user still holds the file (the durable-write-first
-    contract in spec §7.1 belongs to email-in, where the sender is gone).
+    an explicit terminal status the response reports. If the model call reaches
+    a terminal ``failed`` state, a later upload of the same bytes retries that
+    stored ResumeFile instead of creating a duplicate Candidate. Interrupted
+    requests that roll back still leave the user holding the original file.
     """
     data = await file.read()
     if not data:
@@ -278,6 +278,34 @@ async def upload_resume(
             ).scalar_one()
 
     if duplicate is not None:
+        # A failed inline request may have committed the uploaded bytes before
+        # the model call failed. Let the user upload the same file again and
+        # retry that existing ResumeFile, without ever creating a duplicate
+        # Candidate or ResumeFile.
+        job = await _latest_job(session, duplicate.id)
+        if job is not None and job.status == ParseJobStatus.FAILED:
+            retry_job = ParseJob(org_id=ctx.org.id, resume_file_id=duplicate.id)
+            session.add(retry_job)
+            await session.flush()
+            await process_parse_job(
+                session,
+                retry_job,
+                duplicate,
+                extractor=extractor,
+                actor_user_id=ctx.user.id,
+            )
+            candidate = (
+                await session.get(Candidate, duplicate.candidate_id)
+                if duplicate.candidate_id is not None
+                else None
+            )
+            await session.commit()
+            return UploadOutcome(
+                duplicate=False,
+                job=_job_out(retry_job),
+                candidate=_summary(candidate) if candidate is not None else None,
+            )
+
         # Identical file: SHA-256 dedupe — the earlier terminal judgment
         # stands; never a duplicate Candidate (spec §7.3).
         candidate = (
@@ -285,7 +313,6 @@ async def upload_resume(
             if duplicate.candidate_id is not None
             else None
         )
-        job = await _latest_job(session, duplicate.id)
         return UploadOutcome(
             duplicate=True,
             job=_job_out(job) if job is not None else None,

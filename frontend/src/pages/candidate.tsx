@@ -22,7 +22,7 @@ import {
   type ProfileWorkExperience,
 } from "@/lib/api"
 import { formatJalali } from "@/lib/jalali"
-import { formatDateRange, parseStatusLabel } from "@/lib/profile"
+import { formatDateRange, formatResumeDate, parseStatusLabel } from "@/lib/profile"
 
 function ProfileLinkIcon({ link }: { link: ProfileLink }) {
   return <LinkIcon className="size-3.5" data-type={link.type ?? "other"} />
@@ -230,8 +230,7 @@ function ProfileBody({ candidate }: { candidate: CandidateDetail }) {
                 )}
                 {certification.date && (
                   <span className="text-muted-foreground">
-                    {" "}
-                    ({certification.date})
+                    {" "}({formatResumeDate(certification.date)})
                   </span>
                 )}
               </li>

@@ -136,6 +136,28 @@ class TestUploadToPool:
         assert "api_error" in body["job"]["reason"]
         assert body["candidate"] is None
 
+    async def test_retrying_a_failed_identical_upload_reprocesses_the_file(self, api_client):
+        from app.parsing.llm import ExtractorError
+
+        await signup(api_client, "hr5-retry@example.com", "Acme Five Retry")
+        install_extractor([ExtractorError("api unreachable"), ExtractorError("still down")])
+
+        first = await upload(api_client, PERSIAN_RESUME)
+        assert first.status_code == 201
+        assert first.json()["job"]["status"] == "failed"
+
+        install_extractor([extraction_payload()])
+        retry = await upload(api_client, PERSIAN_RESUME)
+
+        assert retry.status_code == 201, retry.text
+        body = retry.json()
+        assert body["duplicate"] is False
+        assert body["job"]["status"] == "extracted"
+        assert body["candidate"]["full_name"] == "پیمان رضایی"
+
+        pool = await api_client.get("/api/candidates")
+        assert len(pool.json()["items"]) == 1
+
 
 class TestUploadValidation:
     async def test_requires_session(self, api_client):

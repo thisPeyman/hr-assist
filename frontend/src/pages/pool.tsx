@@ -29,6 +29,8 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [retryFile, setRetryFile] = useState<File | null>(null)
+  const [retryAvailable, setRetryAvailable] = useState(false)
   const [message, setMessage] = useState<{
     tone: "info" | "warn" | "error"
     text: string
@@ -39,6 +41,8 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
     async (file: File) => {
       setBusy(true)
       setMessage(null)
+      setRetryFile(file)
+      setRetryAvailable(false)
       try {
         const result = await uploadResume(file)
         const status = result.job?.status
@@ -54,6 +58,7 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
               : undefined,
           })
         } else if (status === "extracted" && result.candidate) {
+          setRetryFile(null)
           window.location.assign(`/candidates/${result.candidate.id}`)
           return
         } else if (status && result.job) {
@@ -67,12 +72,16 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
                 label: "نمایش پرونده استعداد",
               },
             })
+          } else if (status === "failed") {
+            setRetryAvailable(true)
+            setMessage({ tone: "error", text: `این سند پردازش نشد: ${detail}.` })
           } else {
             setMessage({ tone: "error", text: `این سند پردازش شد: ${detail}.` })
           }
         }
         onUploaded()
       } catch (e) {
+        setRetryAvailable(true)
         setMessage({ tone: "error", text: persianError(e) })
       } finally {
         setBusy(false)
@@ -95,11 +104,21 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
         role="button"
         tabIndex={0}
         aria-label="بارگذاری رزومه"
-        onClick={() => !busy && inputRef.current?.click()}
+        onClick={() => {
+          if (!busy && inputRef.current) {
+            // Clear before opening the picker so choosing the same file fires
+            // change even when the previous request failed.
+            inputRef.current.value = ""
+            inputRef.current.click()
+          }
+        }}
         onKeyDown={(e) => {
           if ((e.key === "Enter" || e.key === " ") && !busy) {
             e.preventDefault()
-            inputRef.current?.click()
+            if (inputRef.current) {
+              inputRef.current.value = ""
+              inputRef.current.click()
+            }
           }
         }}
         onDragOver={(e) => {
@@ -144,6 +163,7 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]
+            e.currentTarget.value = ""
             if (file) void upload(file)
           }}
         />
@@ -160,6 +180,15 @@ function UploadTray({ onUploaded }: { onUploaded: () => void }) {
               >
                 {message.link.label}
               </Link>
+            )}
+            {retryAvailable && retryFile && !busy && (
+              <button
+                type="button"
+                onClick={() => void upload(retryFile)}
+                className="ms-2 font-medium text-primary underline underline-offset-4"
+              >
+                تلاش دوباره
+              </button>
             )}
           </AlertDescription>
         </Alert>
