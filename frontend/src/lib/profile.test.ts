@@ -6,6 +6,13 @@ import {
   parseStatusLabel,
 } from "./profile"
 
+describe("provider access errors", () => {
+  it("shows denied access for new and previously stored provider errors", () => {
+    expect(parseStatusLabel("failed", "api_error:provider_access_denied")).toContain("403")
+    expect(parseStatusLabel("failed", "api_error:Error code: 403 - Forbidden")).toContain("مجوز")
+  })
+})
+
 /*
  * Anchors from the Persian calendar's public record (cross-checked against
  * jalali.test.ts): Nowruz 1403 = 2024-03-20; derived with jalaali-js:

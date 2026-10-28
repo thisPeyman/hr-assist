@@ -4,12 +4,19 @@
 
 **Blocked by:** 11 (Upload → parse → Candidate in the Talent Pool).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Forwarded email with a resume attachment produces a Candidate through the same statuses as upload — nothing dropped silently
-- [ ] Webhook durable-writes (inbox row + raw .eml) and returns 200 before any parsing; original retained
-- [ ] Persian subjects/bodies (RFC 2047 encoded-words, UTF-8) parse correctly
-- [ ] Duplicate delivery (same Message-ID + recipient) is processed exactly once
-- [ ] Virus or disallowed-type attachments end in a safe explicit status, never a crash
-- [ ] Non-matching recipient → real SMTP bounce, not silence
-- [ ] Org email-in address visible in settings
+- [x] Forwarded email with a resume attachment produces a Candidate through the same statuses as upload — nothing dropped silently
+- [x] Webhook durable-writes (inbox row + raw .eml) and returns 200 before any parsing; original retained
+- [x] Persian subjects/bodies (RFC 2047 encoded-words, UTF-8) parse correctly
+- [x] Duplicate delivery (same Message-ID + recipient) is processed exactly once
+- [x] Virus or disallowed-type attachments end in a safe explicit status, never a crash
+- [x] Non-matching recipient → real SMTP bounce, not silence
+- [x] Org email-in address visible in settings
+
+
+## Answer
+
+Implemented authenticated raw-MIME ingestion, bounded streaming, envelope-recipient Org lookup, durable local/S3 blob storage before HTTP acknowledgement, unique delivery keys, async Postgres receipt processing, MIME attachments/body fallback, Persian headers/filenames, ClamAV fail-closed quarantine and rescan. Added the thin Cloudflare Worker with backup forwarding and SMTP rejection, placeholder configuration, and a local synthetic-MIME/replay CLI. Per the user's instruction, no real domain, DNS or cloud deployment was configured. Settings show the per-Org address when enabled. See [runtime and mock-test instructions](../../../docs/resume-ingestion.md).
+
+Validation: backend API/worker/storage/quarantine/isolation tests, 4 Node Worker tests and browser verification of Persian MIME plus duplicate delivery. Scanner/model/remote storage transports are mocked in automated integration tests; no live email was sent.

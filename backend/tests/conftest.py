@@ -33,6 +33,9 @@ os.environ["HR_MIGRATION_DATABASE_URL"] = TEST_SUPERUSER_URL
 os.environ["HR_APP_DATABASE_URL"] = TEST_APP_URL
 os.environ["HR_APP_DB_PASSWORD"] = "hr_app_dev"
 os.environ["HR_COOKIE_SECURE"] = "false"
+os.environ["HR_RESUME_AI_PROVIDER"] = "openai"
+os.environ["HR_OPENAI_API_KEY"] = ""
+os.environ["HR_GROQ_API_KEY"] = ""
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402

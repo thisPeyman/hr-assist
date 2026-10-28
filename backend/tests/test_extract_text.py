@@ -126,7 +126,7 @@ def test_sniff_zip_without_document_xml_is_unsupported():
 
 def test_sniff_binary_junk_is_unsupported():
     with pytest.raises(ExtractionError) as exc:
-        sniff_kind(b"\x89PNG\r\n\x1a\n" + bytes(range(256)), "photo.png")
+        sniff_kind(b"\x00\xff\x80" + bytes(range(256)), "unknown.bin")
     assert exc.value.reason == "unsupported_format"
 
 

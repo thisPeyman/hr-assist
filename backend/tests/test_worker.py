@@ -16,9 +16,7 @@ from .test_pipeline import PERSIAN_RESUME, FakeExtractor, create_job
 
 
 async def seed_two_pending_jobs(session_factory, org_id: str):
-    first = await create_job(
-        session_factory, org_id, data=PERSIAN_RESUME, filename="first.txt"
-    )
+    first = await create_job(session_factory, org_id, data=PERSIAN_RESUME, filename="first.txt")
     second = await create_job(
         session_factory, org_id, data=PERSIAN_RESUME + b" v2", filename="second.txt"
     )
@@ -67,7 +65,19 @@ class TestDrain:
             )
 
         processed = await drain_pending_jobs(
-            app_session_factory, FakeExtractor([extraction_payload()] * 3)
+            app_session_factory,
+            FakeExtractor(
+                [
+                    extraction_payload(
+                        contact={
+                            "full_name": f"Person {i}",
+                            "email": f"person{i}@example.com",
+                            "phone": None,
+                        }
+                    )
+                    for i in range(3)
+                ]
+            ),
         )
         assert processed == 3
 

@@ -4,9 +4,16 @@
 
 **Blocked by:** 11 (Upload → parse → Candidate in the Talent Pool).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Every `needs_review` row surfaces in the queue with the original doc + partial extracted data
-- [ ] HR can resolve a row by editing and accepting the partial Profile, or dismissing to an explicit terminal status
-- [ ] Accepted corrections win — later re-extraction never overflows them (respects ticket 13's rules)
-- [ ] Queue is discoverable with visible counts; no document can end in an invisible state
+- [x] Every `needs_review` row surfaces in the queue with the original doc + partial extracted data
+- [x] HR can resolve a row by editing and accepting the partial Profile, or dismissing to an explicit terminal status
+- [x] Accepted corrections win — later re-extraction never overflows them (respects ticket 13's rules)
+- [x] Queue is discoverable with visible counts; no document can end in an invisible state
+
+
+## Answer
+
+Implemented `/review`, all-document history, visible counts on home/pool, tenant-scoped detail/download/PNG-preview APIs, editable partial Profile forms, human acceptance/dismissal, Activity entries, immutable raw extraction and protection against overwriting accepted Profiles on replay. Quarantined attachments cannot be downloaded or accepted; scanning can be retried. Added a local ingestion-settings screen and clear empty/error states.
+
+Validation: API tests exercise acceptance, dismissal, repeated decisions, provenance retention, quarantine protection and cross-Org access; Playwright/Edge verifies PDF preview, profile correction, dismissal/history and a 390px mobile viewport. A long-status mobile overflow was found and fixed. See [verification details](../../../docs/resume-ingestion.md).

@@ -1,0 +1,10 @@
+{
+  "name": "hr-assist-email-in",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-28",
+  "vars": {
+    "INBOUND_DOMAIN": "jobs.yourdomain.com",
+    "WEBHOOK_URL": "https://app.yourdomain.com/hooks/inbound-mail",
+    "BACKUP_MAILBOX": "resume-backup@yourdomain.com"
+  }
+}

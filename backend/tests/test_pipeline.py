@@ -297,7 +297,7 @@ class TestTerminalStatuses:
         assert job.status == ParseJobStatus.FAILED
         assert "still down" in job.reason
 
-    async def test_unsupported_format_needs_review(self, app_session_factory):
+    async def test_corrupt_image_needs_review(self, app_session_factory):
         from tests.conftest import seed_org_with_admin
 
         org_id, _ = await seed_org_with_admin(app_session_factory)
@@ -318,7 +318,7 @@ class TestTerminalStatuses:
 
         job = await load_job(app_session_factory, job_id, org_id)
         assert job.status == ParseJobStatus.NEEDS_REVIEW
-        assert job.reason == "extraction:unsupported_format"
+        assert job.reason == "extraction:image_unreadable"
 
     async def test_real_pdf_text_reaches_the_extractor(self, app_session_factory):
         """The OSS extraction layer feeds the model — a real (tiny) PDF's text

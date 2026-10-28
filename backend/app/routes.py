@@ -140,6 +140,7 @@ class CandidateSummary(BaseModel):
     headline: str | None
     email: str | None
     created_at: datetime
+    new_resume_received: bool = False
 
 
 class ResumeOut(BaseModel):
@@ -204,6 +205,7 @@ def _summary(candidate: Candidate) -> CandidateSummary:
         headline=candidate.headline,
         email=candidate.email,
         created_at=candidate.created_at,
+        new_resume_received=candidate.new_resume_received,
     )
 
 
@@ -227,7 +229,7 @@ async def upload_resume(
     stored ResumeFile instead of creating a duplicate Candidate. Interrupted
     requests that roll back still leave the user holding the original file.
     """
-    data = await file.read()
+    data = await file.read(settings.resume_max_bytes + 1)
     if not data:
         raise HTTPException(status_code=400, detail="EMPTY_FILE")
     if len(data) > settings.resume_max_bytes:
@@ -283,7 +285,18 @@ async def upload_resume(
         # retry that existing ResumeFile, without ever creating a duplicate
         # Candidate or ResumeFile.
         job = await _latest_job(session, duplicate.id)
-        if job is not None and job.status == ParseJobStatus.FAILED:
+        retryable_ai_error = bool(
+            job
+            and job.status == ParseJobStatus.NEEDS_REVIEW
+            and (
+                job.reason == "vision_unavailable"
+                or (job.reason or "").startswith("api_error:")
+            )
+        )
+        if job is not None and (
+            (job.status == ParseJobStatus.FAILED and "inbound:" not in (job.reason or ""))
+            or retryable_ai_error
+        ):
             retry_job = ParseJob(org_id=ctx.org.id, resume_file_id=duplicate.id)
             session.add(retry_job)
             await session.flush()

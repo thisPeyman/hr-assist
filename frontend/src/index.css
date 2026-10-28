@@ -1,119 +1,20 @@
-@import "tailwindcss";
-@import "tw-animate-css";
 @import "@fontsource-variable/vazirmatn";
 
-@custom-variant dark (&:is(.dark *));
-
-/*
-  AI HR Assistant — Persian-first design tokens.
-
-  Direction: warm paper + deep Isfahan turquoise as the working primary,
-  saffron reserved for the date/signature accents. Vazirmatn variable carries
-  both display and body duty; Persian digits come from the fa-IR locale.
-*/
-:root {
-  --radius: 0.625rem;
-  --background: oklch(0.982 0.004 106);
-  --foreground: oklch(0.232 0.014 182);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.232 0.014 182);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.232 0.014 182);
-  --primary: oklch(0.5 0.072 187);
-  --primary-foreground: oklch(0.985 0.005 180);
-  --secondary: oklch(0.946 0.008 130);
-  --secondary-foreground: oklch(0.31 0.02 182);
-  --muted: oklch(0.949 0.006 120);
-  --muted-foreground: oklch(0.524 0.016 168);
-  --accent: oklch(0.783 0.126 70);
-  --accent-foreground: oklch(0.27 0.05 60);
-  --destructive: oklch(0.518 0.19 27);
-  --destructive-foreground: oklch(0.985 0.005 180);
-  --border: oklch(0.914 0.008 120);
-  --input: oklch(0.887 0.009 120);
-  --ring: oklch(0.5 0.072 187);
-  --chart-1: oklch(0.5 0.072 187);
-  --chart-2: oklch(0.783 0.126 70);
-  --chart-3: oklch(0.524 0.016 168);
-  --chart-4: oklch(0.65 0.1 150);
-  --chart-5: oklch(0.4 0.06 250);
-  --sidebar: oklch(0.985 0.003 106);
-  --sidebar-foreground: oklch(0.232 0.014 182);
-  --sidebar-primary: oklch(0.5 0.072 187);
-  --sidebar-primary-foreground: oklch(0.985 0.005 180);
-  --sidebar-accent: oklch(0.946 0.008 130);
-  --sidebar-accent-foreground: oklch(0.31 0.02 182);
-  --sidebar-border: oklch(0.914 0.008 120);
-  --sidebar-ring: oklch(0.5 0.072 187);
+* {
+  box-sizing: border-box;
 }
-
-.dark {
-  --background: oklch(0.204 0.012 182);
-  --foreground: oklch(0.956 0.004 106);
-  --card: oklch(0.246 0.014 182);
-  --card-foreground: oklch(0.956 0.004 106);
-  --popover: oklch(0.246 0.014 182);
-  --popover-foreground: oklch(0.956 0.004 106);
-  --primary: oklch(0.72 0.09 187);
-  --primary-foreground: oklch(0.204 0.012 182);
-  --secondary: oklch(0.296 0.016 182);
-  --secondary-foreground: oklch(0.956 0.004 106);
-  --muted: oklch(0.296 0.016 182);
-  --muted-foreground: oklch(0.726 0.012 168);
-  --accent: oklch(0.783 0.126 70);
-  --accent-foreground: oklch(0.27 0.05 60);
-  --destructive: oklch(0.637 0.197 25);
-  --destructive-foreground: oklch(0.985 0.005 180);
-  --border: oklch(0.32 0.014 182);
-  --input: oklch(0.34 0.014 182);
-  --ring: oklch(0.72 0.09 187);
-  --sidebar: oklch(0.246 0.014 182);
-  --sidebar-foreground: oklch(0.956 0.004 106);
-  --sidebar-primary: oklch(0.72 0.09 187);
-  --sidebar-primary-foreground: oklch(0.204 0.012 182);
-  --sidebar-accent: oklch(0.296 0.016 182);
-  --sidebar-accent-foreground: oklch(0.956 0.004 106);
-  --sidebar-border: oklch(0.32 0.014 182);
-  --sidebar-ring: oklch(0.72 0.09 187);
+body {
+  margin: 0;
+  font-family: "Vazirmatn Variable", sans-serif;
 }
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --font-sans: "Vazirmatn Variable", ui-sans-serif, system-ui, sans-serif;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+a {
+  text-underline-offset: 3px;
 }
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-sans);
-  }
-  /* Persian digits everywhere numbers render to users. */
-  :lang(fa) {
-    font-variant-numeric: normal;
-  }
+button,
+input,
+textarea {
+  font: inherit;
+}
+::selection {
+  background: #dbeafe;
 }

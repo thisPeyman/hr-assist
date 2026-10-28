@@ -3,8 +3,8 @@
 Free and local: pypdf as a fast pre-pass (encryption/corruption check) into
 pdfplumber (layout-aware) for PDFs; python-docx for DOCX with a raw
 ``word/document.xml`` strip fallback (text boxes); TXT is a decode. Scanned
-pages (no text layer) are detected by text density — OCR arrives with ticket
-21, so for now they land in ``needs_review`` with reason ``scanned_or_empty``.
+pages (no text layer) are detected by text density. The document preparer in
+``documents.py`` handles OCR, vision and gated legacy-format conversion.
 
 Every unusable document raises :class:`ExtractionError` with a stable machine
 reason; the pipeline maps that to an explicit terminal status. Nothing is
@@ -31,17 +31,26 @@ class ExtractionError(Exception):
 
 
 def sniff_kind(data: bytes, filename: str) -> str:
-    """Classify by content, not filename: ``pdf`` | ``docx`` | ``txt``.
+    """Classify PDF, DOCX, text, raster images, OLE DOC and RTF by content.
 
     Raises :class:`ExtractionError` (``unsupported_format``) for anything the
-    v1 pipeline cannot parse — the GUI nudges toward PDF/DOCX/TXT.
+    document preparer cannot parse — the GUI nudges toward PDF/DOCX/TXT.
     """
-    del filename  # content wins; kept for future per-extension config gates
+    if data.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        return "doc"
+    if data.lstrip().startswith(b"{\\rtf"):
+        return "rtf"
+    if data.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"II*\x00", b"MM\x00*")):
+        return "image"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image"
     if data.startswith(b"%PDF"):
         return "pdf"
     if data.startswith(b"PK\x03\x04"):
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                if sum(item.file_size for item in archive.infolist()) > 50 * 1024 * 1024:
+                    raise ExtractionError("document_too_large")
                 if "word/document.xml" in archive.namelist():
                     return "docx"
         except zipfile.BadZipFile:
@@ -51,15 +60,18 @@ def sniff_kind(data: bytes, filename: str) -> str:
         data.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise ExtractionError("unsupported_format") from None
+    if b"\x00" in data or any(byte < 9 for byte in data):
+        raise ExtractionError("unsupported_format")
     return "txt"
 
 
 class ExtractedText:
-    __slots__ = ("text", "truncated")
+    __slots__ = ("text", "truncated", "raw_text")
 
-    def __init__(self, text: str, truncated: bool = False):
+    def __init__(self, text: str, truncated: bool = False, raw_text: str | None = None):
         self.text = text
         self.truncated = truncated
+        self.raw_text = text if raw_text is None else raw_text
 
 
 def extract_text(data: bytes, filename: str) -> ExtractedText:
@@ -69,13 +81,15 @@ def extract_text(data: bytes, filename: str) -> ExtractedText:
         text = _extract_pdf(data)
     elif kind == "docx":
         text = _extract_docx(data)
-    else:
+    elif kind == "txt":
         text = _extract_txt(data)
+    else:
+        raise ExtractionError("unsupported_format")
     text = _normalize(text)
     if not text.strip():
         raise ExtractionError("empty_text")
     if len(text) > settings.resume_text_cap_chars:
-        return ExtractedText(text[: settings.resume_text_cap_chars], truncated=True)
+        return ExtractedText(text[: settings.resume_text_cap_chars], truncated=True, raw_text=text)
     return ExtractedText(text)
 
 
@@ -92,9 +106,12 @@ def _extract_pdf(data: bytes) -> str:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
             try:
-                reader.decrypt("")  # empty-user-password PDFs are common
+                if not reader.decrypt(""):
+                    raise ExtractionError("encrypted")
             except Exception:  # noqa: BLE001 — any decrypt failure
                 raise ExtractionError("encrypted") from None
+        if len(reader.pages) > settings.resume_max_pages:
+            raise ExtractionError("too_many_pages")
     except ExtractionError:
         raise
     except Exception:  # noqa: BLE001 — pypdf rejects it: try pdfplumber below
@@ -112,7 +129,7 @@ def _extract_pdf(data: bytes) -> str:
     if not pages:
         raise ExtractionError("corrupt_pdf")
     if any(len(page.strip()) < _SCANNED_PAGE_CHARS for page in pages):
-        # No text layer on at least one page — ticket 21 adds OCR here.
+        # The document preparer tries OCR, then vision for these pages.
         raise ExtractionError("scanned_or_empty")
     return "\n".join(pages)
 
@@ -145,7 +162,7 @@ def _strip_docx_xml(data: bytes) -> str:
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             xml = archive.read("word/document.xml").decode("utf-8", "replace")
-    except (zipfile.BadZipFile, KeyError):
+    except zipfile.BadZipFile, KeyError:
         return ""
     return "\n".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", xml))
 

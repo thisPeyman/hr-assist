@@ -39,7 +39,7 @@ jobs:
         run: uv sync --locked
 
       - name: Lint
-        run: uv run ruff check app tests migrations
+        run: uv run ruff check app tests migrations scripts
 
       # The pytest run includes the schema seam (fresh DB + migrations), the
       # RLS seam (cross-org proofs as the non-superuser hr_app role), and the
@@ -73,3 +73,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Email Worker tests
+        run: node --test ../infra/email-worker/worker.test.mjs

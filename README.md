@@ -40,7 +40,7 @@ in `.scratch/hr-ai-assistant/` (v1 spec: `spec.md`).
   + `schema_version`. Set `HR_OPENAI_API_KEY` to enable the paid step.
 - **Nothing dropped silently**: every submitted document ends in an explicit
   terminal status — `extracted`, `needs_review`, `failed`, `not_a_resume`
-  (`ocr_applied`/`vision_used` ship in the enum for ticket 21). The retry
+  (successful OCR/visual routes record `ocr_applied`/`vision_used`). The retry
   ladder is pydantic validation → one repair-retry on the same model →
   escalation → `needs_review`.
 - **Queue**: a Postgres jobs table claimed with `SELECT … FOR UPDATE SKIP
@@ -85,6 +85,10 @@ The built SPA is also served by the backend itself (`app.frontend()`) whenever
 `frontend/dist` exists: `npm run build` then open the backend port.
 
 ## Tests / CI
+
+Resume ingestion, local mock email, review queue, OCR/vision and legacy-format
+setup: [docs/resume-ingestion.md](docs/resume-ingestion.md). Placeholder-only
+environment values are in [backend/.env.example](backend/.env.example).
 
 Everything CI runs, locally:
 

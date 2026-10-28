@@ -15,6 +15,7 @@ Seams kept deliberately narrow:
 Model names come from config, prompts from versioned files (spec §4.5).
 """
 
+import base64
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -37,10 +38,31 @@ class ExtractorError(Exception):
     """Transport/API failure — the SDK already retried; this is terminal."""
 
 
+_NON_RETRYABLE_API_CODES = {
+    "provider_access_denied",
+    "provider_authentication_failed",
+    "credit_balance_exhausted",
+    "organization_spend_limit_exceeded",
+    "project_spend_limit_exceeded",
+    "organization_usage_limit_exceeded",
+    "invalid_api_key",
+}
+
+
+def _api_error_reason(exc: Exception) -> str:
+    if getattr(exc, "status_code", None) == 403:
+        return "provider_access_denied"
+    if getattr(exc, "status_code", None) == 401:
+        return "provider_authentication_failed"
+    body = getattr(exc, "body", None)
+    code = body.get("code") if isinstance(body, dict) else None
+    if code in _NON_RETRYABLE_API_CODES:
+        return code
+    return str(exc)
+
+
 class ResumeExtractor(Protocol):
-    async def extract(
-        self, text: str, *, model: str, repair: list[str] | None = None
-    ) -> dict: ...
+    async def extract(self, text: str, *, model: str, repair: list[str] | None = None) -> dict: ...
 
 
 class OpenAIResumeExtractor:
@@ -55,17 +77,97 @@ class OpenAIResumeExtractor:
         self._provided_client = client
         self._client = client
 
-    async def extract(
-        self, text: str, *, model: str, repair: list[str] | None = None
+    async def extract(self, text: str, *, model: str, repair: list[str] | None = None) -> dict:
+        return await self._extract(text, model=model, repair=repair)
+
+    async def extract_images(
+        self, text: str, images: list[bytes], *, model: str, repair: list[str] | None = None
     ) -> dict:
+        return await self._extract(text, model=model, repair=repair, images=images)
+
+    async def summarize(self, grounding: dict, *, repair: list[str] | None = None) -> dict:
+        from app.summaries import SUMMARY_SCHEMA, summary_prompt
+
+        return await self._extract(
+            json.dumps(grounding, ensure_ascii=False),
+            model=settings.resume_summary_model or settings.resume_extract_model,
+            repair=repair,
+            instructions=summary_prompt(),
+            output_schema=SUMMARY_SCHEMA,
+            schema_name="resume_summary",
+        )
+
+    async def _extract(
+        self,
+        text: str,
+        *,
+        model: str,
+        repair: list[str] | None = None,
+        images: list[bytes] | None = None,
+        instructions: str | None = None,
+        output_schema: dict | None = None,
+        schema_name: str = "resume_extraction",
+    ) -> dict:
+        provider = settings.resume_ai_provider
+        local = provider == "ollama"
+        chat_provider = provider in {"ollama", "groq"}
         if self._client is None:
             from openai import AsyncOpenAI
 
-            self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key,
-                base_url=settings.openai_base_url,
-                timeout=60.0,
-            )
+            if provider == "openai" and not settings.openai_api_key:
+                raise ExtractorError("openai_not_configured")
+            if provider == "groq" and not settings.groq_api_key:
+                raise ExtractorError("groq_not_configured")
+            try:
+                if local:
+                    api_key, base_url = "ollama", settings.ollama_base_url
+                elif provider == "groq":
+                    api_key, base_url = settings.groq_api_key, settings.groq_base_url
+                else:
+                    api_key, base_url = settings.openai_api_key, settings.openai_base_url
+                self._client = AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    timeout=300.0 if local else 60.0,
+                    max_retries=0 if local else 2,
+                )
+            except Exception as exc:
+                raise ExtractorError("openai_client_unavailable") from exc
+        if chat_provider:
+            user_text = text or "Extract this resume verbatim."
+            if repair:
+                user_text += "\n\nCorrect these validation errors: " + "; ".join(repair)
+            user_content: str | list[dict] = user_text
+            if images:
+                user_content = [{"type": "text", "text": user_text}]
+                for image in images:
+                    encoded = base64.b64encode(image).decode("ascii")
+                    user_content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                        }
+                    )
+            try:
+                response = await self._client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": instructions or load_system_prompt()},
+                        {"role": "user", "content": user_content},
+                    ],
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": schema_name,
+                            "strict": True,
+                            "schema": output_schema or strict_json_schema(),
+                        },
+                    },
+                    temperature=0,
+                )
+                return json.loads(response.choices[0].message.content or "")
+            except Exception as exc:  # noqa: BLE001 — local server/model failure
+                raise ExtractorError(_api_error_reason(exc)) from exc
         messages: list[dict] = []
         if repair:
             messages.append(
@@ -78,18 +180,22 @@ class OpenAIResumeExtractor:
                     ),
                 }
             )
-        messages.append({"role": "user", "content": text})
+        content = [{"type": "input_text", "text": text or "Extract this resume verbatim."}]
+        for image in images or []:
+            encoded = base64.b64encode(image).decode("ascii")
+            content.append({"type": "input_image", "image_url": f"data:image/png;base64,{encoded}"})
+        messages.append({"role": "user", "content": content if images else text})
         try:
             response = await self._client.responses.create(
                 model=model,
-                instructions=load_system_prompt(),
+                instructions=instructions or load_system_prompt(),
                 input=messages,
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "resume_extraction",
+                        "name": schema_name,
                         "strict": True,
-                        "schema": strict_json_schema(),
+                        "schema": output_schema or strict_json_schema(),
                     }
                 },
             )
@@ -97,7 +203,19 @@ class OpenAIResumeExtractor:
         except ExtractorError:
             raise
         except Exception as exc:  # noqa: BLE001 — any SDK/API failure
-            raise ExtractorError(str(exc)) from exc
+            raise ExtractorError(_api_error_reason(exc)) from exc
+
+
+class VisionResumeExtractor:
+    def __init__(self, extractor: ResumeExtractor, images: list[bytes]):
+        self.extractor = extractor
+        self.images = images
+
+    async def extract(self, text: str, *, model: str, repair: list[str] | None = None) -> dict:
+        method = getattr(self.extractor, "extract_images", None)
+        if method is None:
+            raise ExtractorError("vision_unavailable")
+        return await method(text, self.images, model=model, repair=repair)
 
 
 @lru_cache(maxsize=1)
@@ -131,9 +249,7 @@ def _short_errors(exc: ValidationError) -> list[str]:
     return errors
 
 
-async def run_extraction_ladder(
-    extractor: ResumeExtractor, text: str
-) -> LadderOutcome:
+async def run_extraction_ladder(extractor: ResumeExtractor, text: str) -> LadderOutcome:
     """Attempt plan (research 02 §5):
 
     1. workhorse model
@@ -167,6 +283,8 @@ async def run_extraction_ladder(
             outcome.model = model
             outcome.error = str(exc)
             outcome.attempts += 1
+            if outcome.error in _NON_RETRYABLE_API_CODES | {"openai_not_configured"}:
+                break
             continue
 
         try:

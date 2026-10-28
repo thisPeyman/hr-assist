@@ -16,8 +16,7 @@ async def test_all_core_tables_exist(superuser_engine):
     async with superuser_engine.connect() as conn:
         rows = await conn.execute(
             sa.text(
-                "select table_name from information_schema.tables "
-                "where table_schema = 'public'"
+                "select table_name from information_schema.tables where table_schema = 'public'"
             )
         )
         assert TABLES <= {r[0] for r in rows}
@@ -25,9 +24,7 @@ async def test_all_core_tables_exist(superuser_engine):
 
 async def test_membership_role_enum_has_admin_and_member(superuser_engine):
     async with superuser_engine.connect() as conn:
-        rows = await conn.execute(
-            sa.text("select unnest(enum_range(null::membership_role))")
-        )
+        rows = await conn.execute(sa.text("select unnest(enum_range(null::membership_role))"))
         assert [r[0] for r in rows] == ["admin", "member"]
 
 
@@ -49,8 +46,7 @@ async def test_membership_is_one_org_per_user(superuser_engine):
         )
         await conn.execute(
             sa.text(
-                "insert into memberships (user_id, org_id, role) "
-                "values (:uid, :oid, 'member')"
+                "insert into memberships (user_id, org_id, role) values (:uid, :oid, 'member')"
             ),
             {"uid": user_id, "oid": org_id},
         )
@@ -106,8 +102,7 @@ async def test_app_role_exists_least_privilege(superuser_engine):
     async with superuser_engine.connect() as conn:
         row = await conn.execute(
             sa.text(
-                "select rolsuper, rolbypassrls, rolcanlogin "
-                "from pg_roles where rolname = 'hr_app'"
+                "select rolsuper, rolbypassrls, rolcanlogin from pg_roles where rolname = 'hr_app'"
             )
         )
         super_, bypassrls, canlogin = row.one()
@@ -126,9 +121,7 @@ async def test_app_role_least_privilege_on_tenancy_tables(superuser_engine):
             assert insert_ok.scalar(), f"hr_app needs INSERT on {table} for signup"
             for denied in ("UPDATE", "DELETE", "TRUNCATE"):
                 priv = await conn.execute(
-                    sa.text(
-                        f"select has_table_privilege('hr_app', '{table}', '{denied}')"
-                    )
+                    sa.text(f"select has_table_privilege('hr_app', '{table}', '{denied}')")
                 )
                 assert not priv.scalar(), f"hr_app must not {denied} {table}"
 
@@ -147,9 +140,7 @@ async def test_activity_is_append_only_for_app(superuser_engine):
     async with superuser_engine.connect() as conn:
         for denied in ("UPDATE", "DELETE"):
             priv = await conn.execute(
-                sa.text(
-                    f"select has_table_privilege('hr_app', 'org_activity', '{denied}')"
-                )
+                sa.text(f"select has_table_privilege('hr_app', 'org_activity', '{denied}')")
             )
             assert not priv.scalar()
 
@@ -159,6 +150,10 @@ async def test_activity_is_append_only_for_app(superuser_engine):
 # --------------------------------------------------------------------------
 
 PARSING_TABLES = {
+    "profile_changes",
+    "resume_summaries",
+    "candidate_notes",
+    "candidate_applications",
     "candidates",
     "candidate_activity",
     "resume_files",
@@ -171,8 +166,7 @@ async def test_parsing_tables_exist(superuser_engine):
     async with superuser_engine.connect() as conn:
         rows = await conn.execute(
             sa.text(
-                "select table_name from information_schema.tables "
-                "where table_schema = 'public'"
+                "select table_name from information_schema.tables where table_schema = 'public'"
             )
         )
         assert PARSING_TABLES <= {r[0] for r in rows}
@@ -193,9 +187,7 @@ async def test_parse_job_status_enum_covers_all_routes(superuser_engine):
     """pending + ticket-11 terminals, plus the OCR/vision routes ticket 21
     will record — the enum ships complete so it never needs a migration."""
     async with superuser_engine.connect() as conn:
-        rows = await conn.execute(
-            sa.text("select unnest(enum_range(null::parse_job_status))")
-        )
+        rows = await conn.execute(sa.text("select unnest(enum_range(null::parse_job_status))"))
         assert [r[0] for r in rows] == [
             "pending",
             "extracted",
@@ -285,23 +277,29 @@ async def test_parse_job_queue_visibility_policy_is_select_only(superuser_engine
 
 
 async def test_hr_app_privileges_on_parsing_tables(superuser_engine):
-    """Least privilege for the full ingest loop: what ticket 11 needs and
-    nothing more (Profile edits arrive with ticket 13, hard delete with 26)."""
+    """Exact privileges for ingestion, workspace deletion, and profile reconciliation."""
     async with superuser_engine.connect() as conn:
         expected = {
-            "candidates": {"SELECT", "INSERT"},
+            "candidates": {"SELECT", "INSERT", "DELETE"},
             "candidate_activity": {"SELECT", "INSERT"},  # append-only (GLOSSARY)
-            "resume_files": {"SELECT", "INSERT"},
+            "resume_files": {"SELECT", "INSERT", "DELETE"},
             "parse_jobs": {"SELECT", "INSERT", "UPDATE"},  # status transitions
             "resume_extractions": {"SELECT", "INSERT"},
+            **{
+                table: {"SELECT", "INSERT", "UPDATE", "DELETE"}
+                for table in (
+                    "profile_changes",
+                    "resume_summaries",
+                    "candidate_notes",
+                    "candidate_applications",
+                )
+            },
         }
         for table, wanted in expected.items():
             granted = set()
             for priv in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"):
                 ok = await conn.execute(
-                    sa.text(
-                        f"select has_table_privilege('hr_app', '{table}', '{priv}')"
-                    )
+                    sa.text(f"select has_table_privilege('hr_app', '{table}', '{priv}')")
                 )
                 if ok.scalar():
                     granted.add(priv)
@@ -314,16 +312,14 @@ async def test_hr_app_can_only_update_resume_file_candidate_link(superuser_engin
     async with superuser_engine.connect() as conn:
         ok = await conn.execute(
             sa.text(
-                "select has_column_privilege('hr_app', 'resume_files',"
-                " 'candidate_id', 'UPDATE')"
+                "select has_column_privilege('hr_app', 'resume_files', 'candidate_id', 'UPDATE')"
             )
         )
         assert ok.scalar()
         for column in ("sha256", "bytes", "org_id"):
             denied = await conn.execute(
                 sa.text(
-                    f"select has_column_privilege('hr_app', 'resume_files',"
-                    f" '{column}', 'UPDATE')"
+                    f"select has_column_privilege('hr_app', 'resume_files', '{column}', 'UPDATE')"
                 )
             )
             assert not denied.scalar(), f"hr_app must not UPDATE resume_files.{column}"

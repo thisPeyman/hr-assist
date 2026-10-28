@@ -7,9 +7,10 @@ Terminal statuses:
                       missing identity, or the retry ladder exhausted)
 - ``not_a_resume``  — the model routed the document out (cover letter, …)
 - ``failed``        — infrastructure failure (API unreachable, unexpected bug)
-``ocr_applied``/``vision_used`` arrive with ticket 21.
+Successful OCR and visual routes record ``ocr_applied``/``vision_used``.
 """
 
+import asyncio
 import time
 import uuid
 from datetime import UTC, datetime
@@ -18,15 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import (
-    Candidate,
-    CandidateActivity,
     ParseJob,
     ParseJobStatus,
     ResumeExtraction,
     ResumeFile,
 )
-from app.parsing.extract_text import ExtractionError, extract_text
-from app.parsing.llm import ResumeExtractor, run_extraction_ladder
+from app.parsing.documents import prepare_document
+from app.parsing.extract_text import ExtractionError
+from app.parsing.llm import ResumeExtractor, VisionResumeExtractor, run_extraction_ladder
 from app.parsing.schema import build_profile
 
 
@@ -70,7 +70,9 @@ async def _process(
     # ---- Layer 1: OSS text extraction (free, local) ------------------------
     started = time.monotonic()
     try:
-        extracted = extract_text(resume_file.bytes, resume_file.original_filename)
+        extracted = await asyncio.to_thread(
+            prepare_document, resume_file.bytes, resume_file.original_filename
+        )
     except ExtractionError as exc:
         _finish(job, ParseJobStatus.NEEDS_REVIEW, reason=f"extraction:{exc.reason}")
         return job.status
@@ -82,13 +84,16 @@ async def _process(
         org_id=job.org_id,
         parse_job_id=job.id,
         resume_file_id=resume_file.id,
-        raw_text=extracted.text,
+        raw_text=extracted.raw_text if extracted.raw_text is not None else extracted.text,
     )
     session.add(extraction_row)
 
     # ---- Layer 2: the one paid call + retry ladder -------------------------
     started = time.monotonic()
-    outcome = await run_extraction_ladder(extractor, extracted.text)
+    transport = (
+        VisionResumeExtractor(extractor, extracted.images) if extracted.images else extractor
+    )
+    outcome = await run_extraction_ladder(transport, extracted.text)
     job.llm_ms = int((time.monotonic() - started) * 1000)
     job.attempts = outcome.attempts
     job.prompt_version = outcome.prompt_version
@@ -100,7 +105,11 @@ async def _process(
         extraction_row.schema_version = outcome.schema_version
 
     if outcome.kind == "api_error":
-        _finish(job, ParseJobStatus.FAILED, reason=f"api_error:{outcome.error}")
+        _finish(
+            job,
+            ParseJobStatus.NEEDS_REVIEW if extracted.images else ParseJobStatus.FAILED,
+            reason=f"api_error:{outcome.error}",
+        )
         return job.status
     if outcome.kind == "invalid":
         # Keep whatever the model did emit: the needs_review queue (ticket 20)
@@ -125,50 +134,44 @@ async def _process(
     if not (contact.full_name or contact.email or contact.phone):
         _finish(job, ParseJobStatus.NEEDS_REVIEW, reason="missing_identity")
         return job.status
-    if not contact.full_name:
-        # Contact exists but no name — the needs_review queue (ticket 20)
-        # shows the partial data; email/phone Merge is ticket 13.
-        _finish(job, ParseJobStatus.NEEDS_REVIEW, reason="missing_name")
-        return job.status
 
     if extraction.needs_review:
         reason = "model_flagged"
+    elif not (contact.email or contact.phone):
+        reason = "missing_contact"
     elif extraction.confidence < settings.resume_extract_confidence_threshold:
         reason = "low_confidence"
     else:
         reason = None
 
-    candidate = Candidate(
-        org_id=job.org_id,
-        full_name=contact.full_name,
-        headline=extraction.headline,
-        email=contact.email,
-        phone=contact.phone,
-        location=contact.location,
-        profile=build_profile(extraction),
-    )
-    session.add(candidate)
-    await session.flush()  # candidate.id for the link + activity
+    if resume_file.candidate_id is not None:
+        # A replay must never overwrite a Profile accepted by a human.
+        _finish(job, ParseJobStatus.NEEDS_REVIEW, reason="existing_profile")
+        return job.status
 
-    resume_file.candidate_id = candidate.id
-    session.add(
-        CandidateActivity(
-            org_id=job.org_id,
-            candidate_id=candidate.id,
-            actor_user_id=actor_user_id,
-            event_type="resume_added",
-            data={
-                "filename": resume_file.original_filename,
-                "parse_status": ParseJobStatus.NEEDS_REVIEW.value
-                if reason
-                else ParseJobStatus.EXTRACTED.value,
-            },
-        )
-    )
+    from app.profiles import attach_profile
+    from app.summaries import ensure_summary
+
+    profile = build_profile(extraction)
+    candidate = await attach_profile(session, resume_file, profile, actor_user_id)
+    if candidate is None:
+        _finish(job, ParseJobStatus.NEEDS_REVIEW, reason="missing_name")
+        return job.status
+    if getattr(resume_file, "_obsolete", False):
+        _finish(job, ParseJobStatus.EXTRACTED, "older_resume_discarded")
+        await session.flush()
+        # The newest-file-only policy removes this obsolete job by FK cascade.
+        # Keep the response snapshot detached so commit cannot update a deleted row.
+        session.expunge(job)
+        session.expunge(extraction_row)
+        await session.delete(resume_file)
+        await session.flush()
+        return job.status
+    await ensure_summary(session, candidate, resume_file.sha256, profile, extractor)
 
     _finish(
         job,
-        ParseJobStatus.NEEDS_REVIEW if reason else ParseJobStatus.EXTRACTED,
+        ParseJobStatus.NEEDS_REVIEW if reason else ParseJobStatus(extracted.route),
         reason=reason,
     )
     return job.status

@@ -6,10 +6,14 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from app.candidate_profiles import router as candidate_profiles_router
 from app.config import settings
 from app.db import async_session_factory
+from app.inbound import inbound_router
 from app.parsing.llm import get_extractor
 from app.parsing.worker import run_worker_forever
+from app.resumes import resumes_router
+from app.review import review_router
 from app.routes import api_router, auth_router
 
 
@@ -32,6 +36,10 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="AI HR Assistant", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(api_router)
+app.include_router(inbound_router)
+app.include_router(review_router)
+app.include_router(resumes_router)
+app.include_router(candidate_profiles_router)
 
 
 @app.get("/healthz", include_in_schema=False)

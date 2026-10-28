@@ -4,11 +4,16 @@
 
 **Blocked by:** 11 (Upload → parse → Candidate in the Talent Pool).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Summary card renders on candidate detail from cache; not recomputed on every view
-- [ ] Cached per resume version; a new resume regenerates; manual regenerate appends Activity
+- [x] Summary card renders on candidate detail from cache; not recomputed on every view
+- [x] Cached per resume version; a new resume regenerates; manual regenerate appends Activity
 - [ ] Summary text is Persian regardless of resume language (golden-set case with an English resume)
-- [ ] Includes the "unclear or missing" list, in Persian
+- [x] Includes the "unclear or missing" list, in Persian
 - [ ] 120–180 words, non-evaluative; golden-set cases show "not stated in resume" rather than invention
-- [ ] Shared prompt skeleton + versioned prompt files + golden set in place, reusable by later AI tickets
+- [x] Shared prompt skeleton + versioned prompt files + golden set in place, reusable by later AI tickets
+
+
+## Answer
+
+Implemented: per-version cache including failures, ingest precomputation, regeneration activity, Persian/120-180-word validation, missing fields, guardrails, overlap-safe experience calculation, versioned prompts, and 20 golden inputs. Automated contracts and browser flows pass. Initial Groq HTTP 403 cleared on retest on 2026-10-28: model access and inference succeeded, the stored resume was reprocessed, and a 173-word Persian summary was persisted with status ready. Full live semantic evaluation of all 20 golden cases remains pending. See [verification boundary](../../../docs/profiles-and-summaries.md).

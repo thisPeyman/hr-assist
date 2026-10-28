@@ -68,6 +68,26 @@ const STATUS_LABELS: Record<ParseJobInfo["status"], string> = {
 }
 
 const REASON_LABELS: Record<string, string> = {
+  "api_error:provider_access_denied": "سرویس هوش مصنوعی دسترسی درخواست را رد کرد (403)؛ کلید و مجوز حساب سرویس را بررسی کنید",
+  "api_error:provider_authentication_failed": "کلید سرویس هوش مصنوعی پذیرفته نشد (401)؛ تنظیمات کلید را بررسی کنید",
+  older_resume_discarded: "نسخهٔ قدیمی‌تر کنار گذاشته شد؛ فایل جدیدتر حفظ شد",
+  missing_contact: "راه تماس در رزومه نیست",
+  "extraction:legacy_reupload": "تبدیل فایل قدیمی در دسترس نیست؛ PDF یا DOCX بارگذاری کنید",
+  "extraction:too_many_pages": "تعداد صفحات بیش از حد مجاز است",
+  "extraction:document_too_large": "سند برای پردازش بیش از حد بزرگ است",
+  "extraction:vision_unavailable": "پردازش تصویری در دسترس نیست",
+  "extraction:image_unreadable": "تصویر قابل خواندن نیست",
+  "inbound:malware_detected": "پیوست ناامن تشخیص داده شد",
+  "inbound:scanner_unavailable": "بررسی ایمنی پیوست در دسترس نیست",
+  "inbound:unsupported_format": "نوع پیوست مجاز نیست؛ PDF یا DOCX بفرستید",
+  "inbound:document_too_large": "پیوست بیش از حد بزرگ است",
+  "inbound:empty_text": "پیوست خالی است",
+  vision_unavailable: "پردازش تصویری در دسترس نیست؛ اتصال سرویس هوش مصنوعی را بررسی کنید",
+  "api_error:openai_not_configured": "اتصال هوش مصنوعی تنظیم نشده است؛ مدیر باید کلید OpenAI API را در سرور ثبت کند",
+  "api_error:vision_unavailable": "پردازش تصویری در سرویس هوش مصنوعی در دسترس نیست",
+  "api_error:credit_balance_exhausted": "اعتبار API هوش مصنوعی تمام شده است؛ مدیر باید اعتبار حساب OpenAI را شارژ کند",
+  "api_error:invalid_api_key": "کلید OpenAI API نامعتبر است؛ مدیر باید کلید سرور را بررسی کند",
+  existing_profile: "پروفایل موجود حفظ شد؛ اطلاعات جدید را بررسی کنید",
   low_confidence: "اطمینان مدل پایین است",
   model_flagged: "مدل درخواست بازبینی کرده است",
   validation_failed: "خروجی مدل نامعتبر بود",
@@ -87,6 +107,10 @@ export function parseStatusLabel(
   reason?: string | null
 ): string {
   const base = STATUS_LABELS[status]
-  const detail = reason ? REASON_LABELS[reason] : undefined
+  const detail = reason ? REASON_LABELS[reason]
+    ?? (reason.startsWith("api_error:") && reason.includes("403") ? REASON_LABELS["api_error:provider_access_denied"] : undefined)
+    ?? (reason.includes("credit_balance_exhausted") ? REASON_LABELS["api_error:credit_balance_exhausted"] : undefined)
+    ?? (reason.startsWith("api_error:") ? "ارتباط با سرویس هوش مصنوعی برقرار نشد" : undefined)
+    : undefined
   return detail ? `${base} — ${detail}` : base
 }

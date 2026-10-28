@@ -21,3 +21,5 @@ backend/.env
 # misc
 .DS_Store
 *.log
+.data/
+.scratch/runtime/

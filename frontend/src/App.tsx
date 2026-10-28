@@ -1,55 +1,86 @@
+import { lazy, Suspense } from "react"
 import { Navigate, Route, Routes } from "react-router"
-
+import { Box, CircularProgress } from "@mui/material"
 import { useAuth } from "@/auth"
-import { CandidatePage } from "@/pages/candidate"
-import { HomePage } from "@/pages/home"
 import { LoginPage } from "@/pages/login"
-import { PoolPage } from "@/pages/pool"
 import { SignupPage } from "@/pages/signup"
+const ResumesPage = lazy(() =>
+  import("@/pages/resumes").then((module) => ({ default: module.ResumesPage })),
+)
+const UploadPage = lazy(() =>
+  import("@/pages/upload").then((module) => ({ default: module.UploadPage })),
+)
+const CandidateBankPage = lazy(() =>
+  import("@/pages/candidates").then((module) => ({
+    default: module.CandidateBankPage,
+  })),
+)
+const CandidatePage = lazy(() =>
+  import("@/pages/candidate-profile").then((module) => ({
+    default: module.CandidatePage,
+  })),
+)
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth()
-  if (loading) {
+  if (loading)
     return (
-      <div className="flex min-h-svh items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
-      </div>
+      <Box sx={{ display: "grid", placeItems: "center", minHeight: "100svh" }}>
+        <CircularProgress aria-label="در حال بارگذاری" />
+      </Box>
     )
-  }
   if (!me) return <Navigate to="/login" replace />
-  return <>{children}</>
+  return children
 }
 
 export default function App() {
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <HomePage />
-          </Protected>
-        }
-      />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route
-        path="/pool"
-        element={
-          <Protected>
-            <PoolPage />
-          </Protected>
-        }
-      />
-      <Route
-        path="/candidates/:id"
-        element={
-          <Protected>
-            <CandidatePage />
-          </Protected>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense
+      fallback={
+        <Box
+          sx={{ display: "grid", placeItems: "center", minHeight: "100svh" }}
+        >
+          <CircularProgress aria-label="در حال بارگذاری صفحه" />
+        </Box>
+      }
+    >
+      <Routes>
+        <Route
+          path="/candidates"
+          element={
+            <Protected>
+              <CandidateBankPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/candidates/:id"
+          element={
+            <Protected>
+              <CandidatePage />
+            </Protected>
+          }
+        />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/resumes"
+          element={
+            <Protected>
+              <ResumesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/upload"
+          element={
+            <Protected>
+              <UploadPage />
+            </Protected>
+          }
+        />
+        <Route path="*" element={<Navigate to="/resumes" replace />} />
+      </Routes>
+    </Suspense>
   )
 }

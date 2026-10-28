@@ -148,11 +148,16 @@ class Candidate(Base):
     email: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
+    normalized_email: Mapped[str | None] = mapped_column(Text, index=True)
+    normalized_phone: Mapped[str | None] = mapped_column(Text, index=True)
+    human_fields: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
+    latest_resume_version: Mapped[str | None] = mapped_column(String(64))
+    new_resume_received: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     # Structured, HR-editable Profile (GLOSSARY) — raw model JSON lives in
     # resume_extractions; this is the reviewed source of truth.
-    profile: Mapped[dict | None] = mapped_column(
-        JSONB().with_variant(JSON(), "sqlite")
-    )
+    profile: Mapped[dict | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -214,9 +219,7 @@ class ResumeFile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    __table_args__ = (
-        UniqueConstraint("org_id", "sha256", name="resume_files_org_sha_key"),
-    )
+    __table_args__ = (UniqueConstraint("org_id", "sha256", name="resume_files_org_sha_key"),)
 
 
 class ParseJobStatus(enum.Enum):
@@ -299,12 +302,92 @@ class ResumeExtraction(Base):
         ForeignKey("resume_files.id", ondelete="cascade"), nullable=False, index=True
     )
     raw_text: Mapped[str | None] = mapped_column(Text)
-    raw_json: Mapped[dict | None] = mapped_column(
-        JSONB().with_variant(JSON(), "sqlite")
-    )
+    raw_json: Mapped[dict | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"))
     model: Mapped[str | None] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(Text)
     schema_version: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class InboundMail(Base):
+    """Durable raw-MIME receipt; only pending metadata is worker-visible."""
+
+    __tablename__ = "inbound_mail"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="cascade"), nullable=False, index=True
+    )
+    message_id: Mapped[str] = mapped_column(Text, nullable=False)
+    recipient: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_key: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("message_id", "recipient", name="inbound_mail_delivery_key"),
+    )
+
+
+class ProfileChange(Base):
+    __tablename__ = "profile_changes"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidates.id", ondelete="cascade"), index=True
+    )
+    resume_version: Mapped[str] = mapped_column(String(64))
+    field_path: Mapped[str] = mapped_column(Text)
+    old_value: Mapped[object | None] = mapped_column(JSONB(none_as_null=True))
+    new_value: Mapped[object | None] = mapped_column(JSONB(none_as_null=True))
+    status: Mapped[str] = mapped_column(Text, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeSummary(Base):
+    __tablename__ = "resume_summaries"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidates.id", ondelete="cascade"), index=True
+    )
+    resume_version: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(Text, default="pending")
+    content: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(Text)
+    prompt_version: Mapped[str] = mapped_column(Text, default="v1")
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "resume_version", name="summary_candidate_version_key"),
+    )
+
+
+class CandidateNote(Base):
+    __tablename__ = "candidate_notes"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidates.id", ondelete="cascade"), index=True
+    )
+    author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="set null"))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CandidateApplication(Base):
+    """Candidate-linked application record; workflow editing belongs to ticket 12."""
+
+    __tablename__ = "candidate_applications"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidates.id", ondelete="cascade"), index=True
+    )
+    role_title: Mapped[str] = mapped_column(Text)
+    stage: Mapped[str] = mapped_column(Text, default="received")
+    data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

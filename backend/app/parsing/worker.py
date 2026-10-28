@@ -8,11 +8,13 @@ process runs). Single uploads never wait for it: the API's sync path runs
 """
 
 import asyncio
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
+from app.inbound import drain_inbound_mail
 from app.models import ParseJob, ParseJobStatus, ResumeFile
 from app.parsing.llm import ResumeExtractor
 from app.parsing.pipeline import process_parse_job
@@ -86,6 +88,11 @@ async def run_worker_forever(
     """Long-lived loop: drain, then poll. Cancel the task to stop."""
     poll = settings.worker_poll_seconds if poll_seconds is None else poll_seconds
     while True:
-        processed = await drain_pending_jobs(session_factory, extractor)
+        try:
+            processed = await drain_inbound_mail(session_factory)
+            processed += await drain_pending_jobs(session_factory, extractor)
+        except Exception:
+            logging.getLogger(__name__).exception("Resume worker iteration failed")
+            processed = 0
         if processed == 0:
             await asyncio.sleep(poll)

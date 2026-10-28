@@ -1,5 +1,7 @@
 """Application settings (env-prefixed ``HR_``, optional ``.env`` in backend/)."""
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,13 +36,34 @@ class Settings(BaseSettings):
     # points the SDK at a gateway when one is in use.
     openai_api_key: str = ""
     openai_base_url: str | None = None
+    resume_ai_provider: Literal["openai", "ollama", "groq"] = "openai"
+    ollama_base_url: str = "http://127.0.0.1:11434/v1/"
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
     resume_extract_model: str = "gpt-5.6-luna"
     resume_extract_model_escalation: str = "gpt-6.1-sol"
+    resume_summary_model: str | None = None
     resume_extract_confidence_threshold: float = 0.6
     resume_text_cap_chars: int = 24_000
     resume_max_bytes: int = 10 * 1024 * 1024
     # Poll cadence for the Postgres jobs-table worker loop.
     worker_poll_seconds: float = 1.0
+
+    inbound_domain: str = ""
+    inbound_webhook_secret: str = ""
+    inbound_storage_dir: str = ".data/inbound"
+    inbound_s3_bucket: str = ""
+    inbound_s3_endpoint_url: str | None = None
+    inbound_max_bytes: int = 25 * 1024 * 1024
+    inbound_max_parts: int = 30
+    clamav_command: str = "clamscan"
+    document_command_timeout: int = 120
+    ocr_enabled: bool = True
+    ocr_command: str = "ocrmypdf"
+    legacy_conversion_enabled: bool = False
+    libreoffice_command: str = "soffice"
+    resume_max_pages: int = 20
+    vision_enabled: bool = True
 
 
 settings = Settings()

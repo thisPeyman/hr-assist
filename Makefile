@@ -1,4 +1,4 @@
-.PHONY: help backend-lint backend-test frontend-lint frontend-build frontend-test ci
+.PHONY: help backend-lint backend-test frontend-lint frontend-build frontend-test email-worker-test ci
 
 help:
 	@echo "backend-lint    ruff over app/tests/migrations"
@@ -9,7 +9,7 @@ help:
 	@echo "ci              everything CI runs, in order"
 
 backend-lint:
-	cd backend && uv run ruff check app tests migrations
+	cd backend && uv run ruff check app tests migrations scripts
 
 backend-test:
 	cd backend && uv run pytest -q
@@ -24,5 +24,8 @@ frontend-build:
 frontend-test:
 	cd frontend && npm test
 
-ci: backend-lint backend-test frontend-lint frontend-build frontend-test
+email-worker-test:
+	node --test infra/email-worker/worker.test.mjs
+
+ci: backend-lint backend-test frontend-lint frontend-build frontend-test email-worker-test
 	@echo "CI suite green."

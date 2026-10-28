@@ -46,6 +46,7 @@ export interface CandidateSummary {
   headline: string | null
   email: string | null
   created_at: string
+  new_resume_received?: boolean
 }
 
 export interface ProfileLink {
@@ -127,6 +128,15 @@ export interface UploadResult {
 }
 
 const PERSIAN_ERRORS: Record<string, string> = {
+  CANDIDATE_NOT_FOUND: "کاندیدا پیدا نشد؛ ممکن است ادغام یا حذف شده باشد.",
+  INVALID_PROFILE: "ساختار اطلاعات پروفایل معتبر نیست؛ فیلدها را بررسی کنید.",
+  PROFILE_CHANGED_REFRESH: "این فیلد پس از پیشنهاد تغییر کرده است؛ صفحه را تازه کنید.",
+  CHANGE_ALREADY_RESOLVED: "این اختلاف قبلاً تعیین تکلیف شده است.",
+  RESUME_VERSION_MISSING: "برای تولید خلاصه، ابتدا رزومهٔ این فرد را بارگذاری کنید.",
+  RESUME_NOT_FOUND: "رزومه پیدا نشد؛ فهرست را تازه کنید.",
+  DOCUMENT_QUARANTINED: "این سند تا تکمیل بررسی ایمنی قابل پذیرش یا دریافت نیست.",
+  DOCUMENT_ALREADY_RESOLVED: "این سند قبلاً تعیین تکلیف شده است؛ فهرست را تازه کنید.",
+  PROFILE_NAME_REQUIRED: "نام کاندیدا را وارد کنید.",
   LOGIN_BAD_CREDENTIALS: "رایانامه یا گذرواژه نادرست است.",
   REGISTER_USER_ALREADY_EXISTS: "این رایانامه قبلاً ثبت شده است.",
   PASSWORD_TOO_SHORT: "گذرواژه باید دست‌کم ۸ نویسه باشد.",
@@ -134,6 +144,91 @@ const PERSIAN_ERRORS: Record<string, string> = {
   FILE_TOO_LARGE: "حجم فایل بیش از حد مجاز است (۱۰ مگابایت).",
   NETWORK: "ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.",
   UNKNOWN: "خطایی رخ داد؛ دوباره تلاش کنید.",
+}
+
+export interface CandidateWorkspace {
+  id: string
+  full_name: string
+  profile: Record<string, unknown> | null
+  resume_id: string | null
+  resume_version: string | null
+  new_resume_received: boolean
+  summary: { status: string; content: { text: string; unclear_or_missing: string[]; grounded_fields: string[] } | null; error: string | null; generated_at: string | null; model: string | null; prompt_version: string } | null
+  changes: { id: string; field_path: string; old_value: unknown; new_value: unknown; resume_version: string }[]
+  duplicates: { id: string; full_name: string; email: string | null; phone: string | null; similarity: number }[]
+  activity: { id: number; event_type: string; data: Record<string, unknown>; created_at: string }[]
+  notes: { id: string; body: string; created_at: string }[]
+  applications: { id: string; role_title: string; stage: string }[]
+}
+
+export async function fetchCandidateWorkspace(id: string, signal?: AbortSignal): Promise<CandidateWorkspace> {
+  const res = await request(`/api/candidates/${id}/workspace`, { signal })
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function saveCandidateProfile(id: string, profile: CandidateProfile): Promise<void> {
+  const res = await request(`/api/candidates/${id}/profile`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile }) })
+  if (!res.ok) await throwApiError(res)
+}
+
+export async function candidateAction(id: string, action: string, body?: unknown): Promise<Record<string, unknown>> {
+  const res = await request(`/api/candidates/${id}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) })
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export interface ResumeItem {
+  id: string
+  filename: string
+  created_at: string
+  status: ParseJobInfo["status"]
+  reason: string | null
+  latest_job_id: string | null
+  candidate_id: string | null
+  candidate_name: string | null
+  candidate_email: string | null
+}
+
+export interface ResumeDetail extends ResumeItem {
+  profile: Record<string, unknown> | null
+}
+
+export interface ResumeEdit {
+  full_name: string
+  email: string | null
+  phone: string | null
+  location: string | null
+  headline: string | null
+  summary: string | null
+  skills: string[]
+}
+
+export async function fetchResumes(search = "", before?: string, signal?: AbortSignal): Promise<{ items: ResumeItem[]; next_cursor: string | null }> {
+  const params = new URLSearchParams({ search, limit: "20" })
+  if (before) params.set("before", before)
+  const res = await request(`/api/resumes?${params}`, { signal })
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function fetchResume(id: string, signal?: AbortSignal): Promise<ResumeDetail> {
+  const res = await request(`/api/resumes/${id}`, { signal })
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function updateResume(id: string, changes: ResumeEdit): Promise<ResumeDetail> {
+  const res = await request(`/api/resumes/${id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes),
+  })
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function deleteResume(id: string): Promise<void> {
+  const res = await request(`/api/resumes/${id}`, { method: "DELETE" })
+  if (!res.ok) await throwApiError(res)
 }
 
 /** Map an API error to a Persian, user-facing message. */
@@ -235,4 +330,62 @@ export async function fetchCandidate(id: string): Promise<CandidateDetail> {
   if (res.status === 404) throw new ApiError(404, "CANDIDATE_NOT_FOUND")
   if (!res.ok) await throwApiError(res)
   return (await res.json()) as CandidateDetail
+}
+
+export interface IngestionSettings {
+  email_address: string | null
+  email_enabled: boolean
+  review_count: number
+}
+
+export interface ReviewItem {
+  id: string
+  filename: string
+  status: ParseJobInfo["status"]
+  reason: string | null
+  created_at: string
+  candidate_id: string | null
+  blocked: boolean
+}
+
+export interface ReviewDetail extends ReviewItem {
+  raw_text: string | null
+  raw_json: Record<string, unknown> | null
+}
+
+export interface ReviewList {
+  items: ReviewItem[]
+  mail_failures: { id: string; reason: string | null; created_at: string }[]
+}
+
+export async function fetchIngestionSettings(): Promise<IngestionSettings> {
+  const res = await request("/api/ingestion/settings")
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function fetchReview(view: "review" | "all" = "review"): Promise<ReviewList> {
+  const res = await request(`/api/review?view=${view}`)
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function fetchReviewDetail(id: string): Promise<ReviewDetail> {
+  const res = await request(`/api/review/${id}`)
+  if (!res.ok) await throwApiError(res)
+  return res.json()
+}
+
+export async function resolveReview(
+  id: string, action: "accept" | "not_a_resume" | "failed" | "rescan", profile?: CandidateProfile,
+): Promise<{ candidate_id: string | null }> {
+  const res = await request(`/api/review/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, extraction: profile ? {
+      ...profile, is_resume: true, confidence: 1, needs_review: false,
+    } : null }),
+  })
+  if (!res.ok) await throwApiError(res)
+  return res.json()
 }
