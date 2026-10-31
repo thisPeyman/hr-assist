@@ -5,14 +5,13 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import defer
 
 from app.models import (
     Candidate,
     CandidateActivity,
-    CandidateNote,
     ProfileChange,
     ResumeFile,
     ResumeSummary,
@@ -93,17 +92,9 @@ async def workspace(candidate_id: UUID, ctx: TenantContextDep, session: SessionD
         .scalars()
         .all()
     )
-    notes = (
-        (
-            await session.execute(
-                select(CandidateNote)
-                .where(CandidateNote.candidate_id == candidate.id)
-                .order_by(CandidateNote.created_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    from app.notes import note_rows
+
+    notes = await note_rows(session, ctx.org.id, candidate.id)
     applications = await application_rows(session, ctx.org.id, candidate.id)
     return {
         "id": candidate.id,
@@ -145,9 +136,7 @@ async def workspace(candidate_id: UUID, ctx: TenantContextDep, session: SessionD
             }
             for event in events
         ],
-        "notes": [
-            {"id": note.id, "body": note.body, "created_at": note.created_at} for note in notes
-        ],
+        "notes": notes,
         "applications": applications,
     }
 
@@ -296,10 +285,6 @@ async def regenerate(
     return {"status": row.status, "error": row.error}
 
 
-class NoteInput(BaseModel):
-    body: str = Field(min_length=1, max_length=10000)
-
-
 @router.post("/{candidate_id}/acknowledge-resume")
 async def acknowledge(candidate_id: UUID, ctx: TenantContextDep, session: SessionDep) -> dict:
     await lock_org(session, ctx.org.id)
@@ -308,20 +293,3 @@ async def acknowledge(candidate_id: UUID, ctx: TenantContextDep, session: Sessio
     activity(session, candidate, "new_resume_acknowledged", ctx.user.id)
     await session.commit()
     return {"id": candidate.id}
-
-
-@router.post("/{candidate_id}/notes", status_code=201)
-async def add_note(
-    candidate_id: UUID, data: NoteInput, ctx: TenantContextDep, session: SessionDep
-) -> dict:
-    await lock_org(session, ctx.org.id)
-    candidate = await candidate_for(session, ctx.org.id, candidate_id)
-    if not data.body.strip():
-        raise HTTPException(422, "EMPTY_NOTE")
-    note = CandidateNote(
-        org_id=ctx.org.id, candidate_id=candidate.id, author_id=ctx.user.id, body=data.body.strip()
-    )
-    session.add(note)
-    activity(session, candidate, "note_added", ctx.user.id)
-    await session.commit()
-    return {"id": note.id}

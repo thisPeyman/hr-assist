@@ -344,6 +344,9 @@ async def application_detail(
     application_id: UUID, ctx: TenantContextDep, session: SessionDep
 ) -> dict:
     application = await application_for(session, ctx.org.id, application_id)
+    from app.notes import note_rows
+
+    notes = await note_rows(session, ctx.org.id, application.candidate_id, application.id)
     events = (
         await session.scalars(
             select(ApplicationActivity)
@@ -356,6 +359,7 @@ async def application_detail(
     ).all()
     return {
         **application_data(application),
+        "notes": notes,
         "activity": [
             {
                 "id": e.id,

@@ -70,6 +70,7 @@ class MembershipRole(enum.Enum):
 
 class Membership(Base):
     __tablename__ = "memberships"
+    __table_args__ = (UniqueConstraint("org_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -383,12 +384,76 @@ class CandidateNote(Base):
     application_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="set null"))
     body: Mapped[str] = mapped_column(Text)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    editor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        ForeignKeyConstraint(
+            ["org_id", "candidate_id"], ["candidates.org_id", "candidates.id"], ondelete="CASCADE"
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "author_id"], ["memberships.org_id", "memberships.user_id"]
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "editor_id"], ["memberships.org_id", "memberships.user_id"]
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "candidate_id", "application_id"],
+            [
+                "candidate_applications.org_id",
+                "candidate_applications.candidate_id",
+                "candidate_applications.id",
+            ],
+            deferrable=True,
+            initially="DEFERRED",
+        ),
         ForeignKeyConstraint(
             ["org_id", "application_id"],
             ["candidate_applications.org_id", "candidate_applications.id"],
+        ),
+    )
+
+
+class NoteMention(Base):
+    __tablename__ = "note_mentions"
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="CASCADE"), primary_key=True
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "note_id"],
+            ["candidate_notes.org_id", "candidate_notes.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(["org_id", "user_id"], ["memberships.org_id", "memberships.user_id"]),
+    )
+
+
+class Notification(Base):
+    """Recipient-private in-app delivery; structured references, never arbitrary URLs."""
+
+    __tablename__ = "notifications"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"), index=True)
+    recipient_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    kind: Mapped[str] = mapped_column(Text)
+    dedupe_key: Mapped[str] = mapped_column(Text)
+    note_id: Mapped[uuid.UUID | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("org_id", "recipient_id", "dedupe_key"),
+        ForeignKeyConstraint(
+            ["org_id", "recipient_id"], ["memberships.org_id", "memberships.user_id"]
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "note_id"],
+            ["candidate_notes.org_id", "candidate_notes.id"],
+            ondelete="CASCADE",
         ),
     )
 
@@ -410,6 +475,7 @@ class CandidateApplication(Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
+        UniqueConstraint("org_id", "candidate_id", "id"),
         UniqueConstraint("candidate_id", "role_id", name="application_candidate_role_key"),
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(["org_id", "role_id"], ["roles.org_id", "roles.id"]),

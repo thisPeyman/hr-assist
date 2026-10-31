@@ -10,6 +10,8 @@ from app.candidate_profiles import router as candidate_profiles_router
 from app.config import settings
 from app.db import async_session_factory
 from app.inbound import inbound_router
+from app.notes import router as notes_router
+from app.notifications import router as notifications_router
 from app.parsing.llm import get_extractor
 from app.parsing.worker import run_worker_forever
 from app.pipeline import router as pipeline_router
@@ -44,6 +46,8 @@ app.include_router(resumes_router)
 app.include_router(candidate_profiles_router)
 app.include_router(pipeline_router)
 app.include_router(search_router)
+app.include_router(notes_router)
+app.include_router(notifications_router)
 
 
 @app.get("/healthz", include_in_schema=False)

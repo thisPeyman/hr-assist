@@ -28,6 +28,8 @@ context and rejection reason are optional. A move never sends mail.
 - `PATCH /api/applications/{id}/owner`: nullable, same-org active User only.
   Stored inactive attribution remains visible but cannot be newly assigned.
 - `GET /api/applications/{id}`: immutable, attributed Application Activity.
+  Ticket 17 also returns this Application's own editable Notes; see
+  [notes and notifications](notes-and-notifications.md).
   The app role has SELECT/INSERT and only column-level
   UPDATE(application_id), allowing Merge to reparent events without editing
   payload, actor, timestamp or event type. No Activity mutation API exists.
@@ -58,7 +60,9 @@ then retires the redundant Application. Its source id, stage, owner, creation
 time and full JSON survive in `application_merged` Activity. Candidate notes
 are subsequently reassigned to the surviving Candidate as usual.
 
-Future Application children (Notes/mentions in 17, Interviews in 23, mail and
+Ticket 17's mentions/notifications reference stable Note ids and resolve links
+through the reparented Note; they need no recipient-state mutation during Merge.
+Future Application children (Interviews in 23, mail and
 other workflow data) **must join this explicit reparent boundary before a
 duplicate is deleted**. Do not add a child table and rely on CASCADE to preserve
 it. Ticket 26 erasure must include these Activity JSON payloads in its retention/

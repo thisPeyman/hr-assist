@@ -290,6 +290,13 @@ async def test_email_phone_bridge_merges_existing_people(api_client):
                 )
             ).json()
         )
+    me = (await api_client.get("/api/me")).json()
+    note = (
+        await api_client.post(
+            f"/api/applications/{applications[1]['id']}/notes",
+            json={"body": "یادداشت پیش از ادغام خودکار", "mention_user_ids": [me["id"]]},
+        )
+    ).json()
     joined = await upload(api_client, b"Bridge identity new resume")
     assert joined.status_code == 201, joined.text
     assert joined.json()["candidate"]["id"] == target
@@ -299,7 +306,17 @@ async def test_email_phone_bridge_merges_existing_people(api_client):
     assert len(board["applications"]) == 1
     assert board["applications"][0]["id"] == applications[0]["id"]
     events = (await api_client.get(f"/api/applications/{applications[0]['id']}")).json()["activity"]
-    assert {event["event_type"] for event in events} == {"application_added", "application_merged"}
+    assert {event["event_type"] for event in events} == {
+        "application_added",
+        "application_merged",
+        "note_added",
+    }
+    notes = (await api_client.get(f"/api/applications/{applications[0]['id']}")).json()["notes"]
+    assert notes[0]["id"] == note["id"] and notes[0]["candidate_id"] == target
+    href = (await api_client.get("/api/notifications")).json()["items"][0]["href"]
+    assert href == (
+        f"/candidates/{target}?tab=notes&note={note['id']}&application={applications[0]['id']}"
+    )
 
 
 async def test_stale_diff_never_overwrites_a_later_human_edit(api_client):
