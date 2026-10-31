@@ -133,10 +133,20 @@ class OpenAIResumeExtractor:
                 )
             except Exception as exc:
                 raise ExtractorError("openai_client_unavailable") from exc
+        repair_instruction = (
+            "Correct the resume summary and return the corrected JSON."
+            if schema_name == "resume_summary"
+            else "Re-extract the resume and return the corrected JSON."
+        )
         if chat_provider:
             user_text = text or "Extract this resume verbatim."
             if repair:
-                user_text += "\n\nCorrect these validation errors: " + "; ".join(repair)
+                user_text += (
+                    "\n\nCorrect these validation errors: "
+                    + "; ".join(repair)
+                    + "\n"
+                    + repair_instruction
+                )
             user_content: str | list[dict] = user_text
             if images:
                 user_content = [{"type": "text", "text": user_text}]
@@ -174,9 +184,10 @@ class OpenAIResumeExtractor:
                 {
                     "role": "user",
                     "content": (
-                        "Your previous extraction failed validation:\n"
+                        "Your previous output failed validation:\n"
                         + "\n".join(f"- {error}" for error in repair)
-                        + "\n\nRe-extract the resume and return the corrected JSON."
+                        + "\n\n"
+                        + repair_instruction
                     ),
                 }
             )

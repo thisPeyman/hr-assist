@@ -57,6 +57,43 @@
   and python-dateutil/six; imports and `uv pip check` compatible. Ticket12's own
   full backend run includes passing existing S3 adapter. Historical repair188-pass
   count above is retained as the evidence available at repair time.
+- Ticket [14](issues/14-cached-ai-resume-summary.md), contract v2 (2026-10-31):
+  implementable API/database criteria complete; full original ticket remains
+  **ready-for-human**, with UI/browser and authorized live20-case Persian semantic
+  acceptance explicitly unchecked. Added deterministic category facts and minimal
+  evidence snapshots, multiple-current/partial/unknown states, residence/work
+  locations, cache-only legacy labeling and preserved successful provenance after
+  failed force. No SQL migration, live calls, paid GET/backfill, new browser tests
+  or ticket15 scope. Persian MUI renders reliable categories separately from prose.
+  Versioned v2 instructions and strict schema; provider output cannot author facts,
+  employer or years fields; absent evidence and explicit forbidden phrases reject
+  with one repair. This does not prove arbitrary prose factuality or semantics.
+  - Red→green through HTTP/Postgres: missing coverage (`coverage_status` KeyError),
+    failed-force old content relabeled `new-model`, SDK-boundary Responses/chat
+    summary repair using extraction guidance. Additional boundary regression:
+    valid20-model-gap output plus deterministic gaps previously errored on storage;
+    generated contract now allows the bounded32 combined labels.
+  - Exact backend command from worktree `backend/`:
+    `HR_TEST_ADMIN_URL='postgresql+asyncpg://postgres:hr_v1_test_only@127.0.0.1:56432/postgres' HR_TEST_APP_URL='postgresql+asyncpg://hr_app:hr_app_dev@127.0.0.1:56432/hr_test' /home/peyman/Projects/me/hr2/backend/.venv/bin/python -m pytest -q`.
+    Uses only disposable Docker `hr_test`, never host/dev database. Final full
+    suite **222 passed** (includes existing repair29/pipeline tests). Focused
+    `tests/test_summary_contract.py tests/test_profile_merge_summary.py`:53 passed,
+    including23 new parametrized public HTTP/actual Postgres cases with only
+    provider/SDK external boundaries mocked.
+  - `/home/peyman/Projects/me/hr2/backend/.venv/bin/ruff check app tests migrations scripts`:
+    clean. `npm run build`:pass. `npm test`:25 existing utility tests pass.
+    `npx --no-install oxlint`:zero errors, same four pre-existing warnings.
+    Frontend uses ignored symlink to main `node_modules`; no new dependencies.
+  - `/home/peyman/Projects/me/hr2/backend/.venv/bin/python -m scripts.eval_resume_summary --output /tmp/opencode/hr-v1-summary-v2-offline.json`:
+    all20 deterministic expectations/gaps pass, explicitly labeled
+    `offline_deterministic_only` / semantic acceptance NOT_EVALUATED. No `--live`.
+    Every fixture now has literal category expectations; overlap4.0 vs incomplete
+    years unknown are distinct. Future live mode records date/provider/model/
+    prompt/output for human review, not semantic PASS.
+  - Snapshot/legacy/provenance/validation semantics and exact human release gate:
+    `docs/profiles-and-summaries.md`. Ticket Answer/map updated without resolving
+    original semantic or UI criteria. Integration tip `1fa1c5e` checked before
+    implementation and merged before delivery (already ancestor/current).
 
 ## Review regression pointers
 

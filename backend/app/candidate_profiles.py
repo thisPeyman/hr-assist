@@ -119,6 +119,9 @@ async def workspace(candidate_id: UUID, ctx: TenantContextDep, session: SessionD
             "generated_at": summary.generated_at,
             "model": summary.model,
             "prompt_version": summary.prompt_version,
+            "coverage_status": "structured_v2"
+            if (summary.content or {}).get("contract_version") == 2
+            else "legacy_unverified" if summary.content else "unavailable",
         }
         if summary
         else None,
