@@ -1,0 +1,39 @@
+# v1 implementation run
+
+- Integration branch: `integration/hr-v1`
+- Starting commit: `b7873720b332bae1e36524f3c0effc93428050ac`
+- User direction: continue the current project/commit structure; implement remaining tickets one by one, continuing until done, using implement-spec.
+- Preserve the current Material UI/Emotion frontend rather than reverting the latest commit's UI rewrite. Reconcile the documented stack to match this continuation decision.
+- Workflow: one implementer worktree/branch per ticket, TDD, merge current integration tip before reporting; a merger agent merges completed work into integration. No remote PR is requested; local Markdown tracker is authoritative.
+- Do not use real credentials, send real email, deploy infrastructure, or spend API credit for verification. Record live/human-only checks honestly as pending, not successful.
+- Tests recreate only `hr_test`; serialize backend test runs across worktrees. Use existing main repo Python environment if necessary; dependency synchronization currently times out downloading botocore. Frontend dependencies are installed in the main worktree.
+
+## Sequence
+
+1. Repair latest-commit review gaps (13/14/16/20), retaining audit and tenant protections.
+2. 12 — board, roles, applications, stages.
+3. 14 — finish automated summary verification; record live semantic evaluation boundary.
+4. 15 — natural-language search and editable chips.
+5. 17 — notes, mentions, notifications.
+6. 18 — Google OAuth seam, system mailbox, user administration.
+7. 19 — per-user connect and human-sent outreach.
+8. 22 — candidate comparison.
+9. 23 — scheduling core and booking page.
+10. 24 — scheduling lifecycle and reminders.
+11. 25 — endings.
+12. 26 — pipeline editor, hard/soft candidate deletion.
+13. 27 — optional TOTP.
+14. 28 — pilot verification; final two-axis review and fixes.
+
+## Progress
+
+- Planning: clean main checked; integration branch created.
+
+## Review regression pointers
+
+- `backend/app/resumes.py:251`: Member deletion silently erases Candidate and cascading Activity; remove implicit Candidate deletion and implement proper Admin erasure in ticket 26.
+- `backend/app/review.py:248-286`: acceptance bypasses identity matching, protected corrections/diffs, latest-version retention and summary precomputation. Workspace PATCH creation also omits version/summary initialization.
+- `frontend/src/App.tsx`: no review/ingestion-settings routes; existing API helpers have no callers. Need discoverable review count, accept/dismiss/rescan, mail failures and forwarding address.
+- Raw Gregorian values in profile diffs/certification dates need existing Jalali presentation helpers.
+- Four disposable regression probes at `/tmp/opencode/test_hr_latest_commit_review.py` reproduced member DELETE 204, correction overwrite, summary 409 RESUME_VERSION_MISSING, and duplicate on review acceptance. Probes assert proposed behavior; adapt to explicit human-edit semantics rather than treating every submitted field as a new override.
+- Baseline tests: 179 backend pass, one missing-boto3 failure; frontend build and 25 tests pass; Worker 4 pass; offline summary grounding 20 pass.

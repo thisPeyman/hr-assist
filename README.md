@@ -9,7 +9,7 @@ in `.scratch/hr-ai-assistant/` (v1 spec: `spec.md`).
 - `backend/` — FastAPI + SQLAlchemy (async) + Alembic on Postgres. Auth is
   self-rolled on [fastapi-users](https://fastapi-users.github.io/) (argon2 via
   pwdlib, cookie sessions stored in `access_tokens`).
-- `frontend/` — Vite + React + Tailwind v4 + shadcn/ui, RTL, self-hosted
+- `frontend/` — Vite + React + Material UI/Emotion, RTL, self-hosted
   Vazirmatn, Jalali rendering via jalaali-js.
 
 ## Tenancy model (v1: one Org per User)
