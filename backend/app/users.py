@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_session
 from app.models import AccessToken, Membership, MembershipRole, Org, OrgActivity, User
+from app.pipeline_defaults import seed_stages
 from app.rls import set_current_org
 
 # --------------------------------------------------------------------------
@@ -128,6 +129,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         # Tenant GUC first, so the org_activity INSERT passes its own RLS gate.
         await set_current_org(session, org.id)
+        seed_stages(session, org.id)
         await session.commit()
         await session.refresh(user)
 

@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import { AppShell } from "@/components/shell"
 import { ProfileEditor } from "@/components/profile-editor"
+import { AddToRoleButton } from "@/components/pipeline-controls"
 import {
   candidateAction,
   fetchCandidateWorkspace,
@@ -289,6 +290,7 @@ export function CandidatePage() {
               </Button>
             )}
           </Stack>
+          <Box sx={{ mb: 3 }}><AddToRoleButton candidateId={id} onAdded={() => void load().catch(cause => setError(persianError(cause)))} /></Box>
           {data.new_resume_received && (
             <Alert
               severity="info"
@@ -631,9 +633,9 @@ export function CandidatePage() {
                         sx={{ p: 2 }}
                         key={application.id}
                       >
-                        <Typography sx={{ fontWeight: 650 }}>
+                        <Button component={Link} to={`/roles/${application.role_id}`} sx={{ fontWeight: 650 }}>
                           {application.role_title}
-                        </Typography>
+                        </Button>
                         <Chip
                           size="small"
                           sx={{ mt: 1 }}

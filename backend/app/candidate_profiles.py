@@ -12,7 +12,6 @@ from sqlalchemy.orm import defer
 from app.models import (
     Candidate,
     CandidateActivity,
-    CandidateApplication,
     CandidateNote,
     ProfileChange,
     ResumeFile,
@@ -20,6 +19,7 @@ from app.models import (
 )
 from app.parsing.llm import get_extractor
 from app.parsing.schema import ResumeExtractionData, build_profile
+from app.pipeline import application_rows
 from app.profiles import (
     activity,
     apply_human_edits,
@@ -104,17 +104,7 @@ async def workspace(candidate_id: UUID, ctx: TenantContextDep, session: SessionD
         .scalars()
         .all()
     )
-    applications = (
-        (
-            await session.execute(
-                select(CandidateApplication)
-                .where(CandidateApplication.candidate_id == candidate.id)
-                .order_by(CandidateApplication.created_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    applications = await application_rows(session, ctx.org.id, candidate.id)
     return {
         "id": candidate.id,
         "full_name": candidate.full_name,
@@ -155,10 +145,7 @@ async def workspace(candidate_id: UUID, ctx: TenantContextDep, session: SessionD
         "notes": [
             {"id": note.id, "body": note.body, "created_at": note.created_at} for note in notes
         ],
-        "applications": [
-            {"id": application.id, "role_title": application.role_title, "stage": application.stage}
-            for application in applications
-        ],
+        "applications": applications,
     }
 
 

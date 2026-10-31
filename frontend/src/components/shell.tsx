@@ -17,7 +17,7 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material"
-import { FileText, Inbox, LogOut, Menu, Settings, Users } from "lucide-react"
+import { BriefcaseBusiness, Columns3, FileText, Inbox, LogOut, Menu, Settings, Users } from "lucide-react"
 import { useAuth } from "@/auth"
 import { fetchIngestionSettings, logout } from "@/lib/api"
 
@@ -38,6 +38,8 @@ export function Wordmark() {
 }
 
 const navigation = [
+  { path: "/board", title: "برد استخدام", icon: Columns3 },
+  { path: "/roles", title: "فرصت‌های شغلی", icon: BriefcaseBusiness },
   { path: "/candidates", title: "بانک کاندیداها", icon: Users },
   { path: "/resumes", title: "رزومه‌های دریافت‌شده", icon: FileText },
   { path: "/review", title: "صف بازبینی", icon: Inbox },
@@ -82,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const menu = (
     <Box sx={{ px: 1.5, py: 3 }}>
       <Typography sx={{ px: 1.5, color: "text.secondary", fontSize: 11 }}>
-        مدیریت رزومه‌ها
+        فضای کار استخدام
       </Typography>
       <List sx={{ mt: 1 }}>
         {navigation.map(({ path, title, icon: Icon }) => (
@@ -136,7 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu size={22} />
             </IconButton>
             <Link
-              to="/resumes"
+              to="/board"
               style={{ textDecoration: "none", color: "inherit" }}
             >
               <Wordmark />

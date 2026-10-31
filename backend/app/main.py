@@ -12,6 +12,7 @@ from app.db import async_session_factory
 from app.inbound import inbound_router
 from app.parsing.llm import get_extractor
 from app.parsing.worker import run_worker_forever
+from app.pipeline import router as pipeline_router
 from app.resumes import resumes_router
 from app.review import review_router
 from app.routes import api_router, auth_router
@@ -40,6 +41,7 @@ app.include_router(inbound_router)
 app.include_router(review_router)
 app.include_router(resumes_router)
 app.include_router(candidate_profiles_router)
+app.include_router(pipeline_router)
 
 
 @app.get("/healthz", include_in_schema=False)
