@@ -41,6 +41,7 @@ import {
 } from "@/lib/api"
 import { formatJalali } from "@/lib/jalali"
 import { reviewProfile } from "@/lib/review"
+import { formatResumeDate } from "@/lib/profile"
 import { Preview, Profile } from "@/pages/resumes"
 
 const fieldLabels: Record<string, string> = {
@@ -79,6 +80,7 @@ const fieldLabels: Record<string, string> = {
 }
 const eventLabels: Record<string, string> = {
   resume_added: "رزومه دریافت شد",
+  resume_deleted: "فایل رزومه حذف شد؛ پرونده و تاریخچه حفظ شدند",
   new_resume_added: "نسخهٔ جدید رزومه دریافت شد",
   profile_reconciled: "فیلدهای خالی تکمیل و اختلاف‌ها پیشنهاد شدند",
   profile_edited: "پروفایل توسط HR ویرایش شد",
@@ -131,7 +133,7 @@ function Value({ value }: { value: unknown }) {
                 <Value value={item} />
               ) : (
                 <Typography component="span" dir="auto" sx={{ fontSize: 13 }}>
-                  {item === true ? "بله" : String(item)}
+                  {item === true ? "بله" : ["start_date", "end_date", "date"].includes(key) && typeof item === "string" ? formatResumeDate(item) : String(item)}
                 </Typography>
               )}
             </Box>

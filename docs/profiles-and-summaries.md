@@ -42,3 +42,31 @@ uv run python -m scripts.eval_resume_summary --live
 - `POST /api/candidates/{id}/summary/regenerate`
 - `POST /api/candidates/{id}/notes`
 - `POST /api/candidates/{id}/acknowledge-resume`
+
+## Repair 29 — human ingestion paths (2026-10-31)
+
+Review acceptance and manual resume PATCH creation now reuse `attach_profile`,
+identity normalization, empty-field reconciliation, latest-file retention and
+per-version summary initialization. Only intentionally edited fields are human
+overrides. Review requests may send `edited_fields` plus `expected_values` keyed
+by profile field path; the UI derives these from the original form and current
+linked Profile. A conflicting baseline returns `409 PROFILE_CHANGED_REFRESH`
+atomically. Legacy review clients without explicit edits infer changes from raw
+extraction but never overwrite a conflicting existing correction. Unchanged
+extraction values remain proposals, not silent overrides.
+
+PATCH ignores omitted fields (explicit null/empty clears them) and accepts
+`expected_values` for optimistic protection. Human edits supersede pending
+proposals for those paths; proposal acceptance also verifies the current resume
+version. An older unassigned review returns `409 RESUME_SUPERSEDED` rather than
+replacing a newer attached file. Raw extraction remains immutable while retained
+under the latest-resume-only policy.
+
+Deleting a resume deletes the file/parse provenance only. The Candidate, Notes,
+Applications, prior Activity and versioned summary remain; `resume_deleted` is
+appended. Admin erasure/anonymization remains ticket 26.
+
+Regression verification: public HTTP APIs against isolated Postgres `hr_test`.
+UI is statically typechecked/built/linted; no new UI/browser tests were added,
+per the user's API/database-only test boundary. Browser and live semantic/model
+acceptance remain pending for this repair.

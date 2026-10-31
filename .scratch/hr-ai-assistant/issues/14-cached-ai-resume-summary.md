@@ -17,3 +17,11 @@
 ## Answer
 
 Implemented: per-version cache including failures, ingest precomputation, regeneration activity, Persian/120-180-word validation, missing fields, guardrails, overlap-safe experience calculation, versioned prompts, and 20 golden inputs. Automated contracts and browser flows pass. Initial Groq HTTP 403 cleared on retest on 2026-10-28: model access and inference succeeded, the stored resume was reprocessed, and a 173-word Persian summary was persisted with status ready. Full live semantic evaluation of all 20 golden cases remains pending. See [verification boundary](../../../docs/profiles-and-summaries.md).
+
+## Comments
+
+- 2026-10-31: [Repair 29](29-review-regressions.md) initializes versions and
+  precomputed summaries on human review acceptance and PATCH creation as well
+  as automated ingest. HTTP regressions cover cached success and failure without
+  blocking acceptance. No live model calls; full live semantic evaluation and
+  the remaining ticket-14 verification unit are not completed by this repair.

@@ -30,6 +30,14 @@
 ## Progress
 
 - Planning: clean main checked; integration branch created.
+- Repair unit [29](issues/29-review-regressions.md): implemented current-MUI
+  review/settings surfaces and API identity/correction/version/summary repairs;
+  file deletion preserves Candidate and Activity. Added nine API/Postgres
+  regressions, red→green on reproduced defects. Backend 188 pass / one existing
+  missing-boto3 environment failure; frontend build and direct oxlint pass
+  (four pre-existing warnings), Ruff passes. No UI/browser tests or live calls;
+  browser acceptance and full live summary semantics remain pending. Parent
+  owns proxy dependency retry; no later ticket included in this repair.
 - Architecture notes for implementers: `/tmp/opencode/hr-v1-seams.md`. Local pgvector extension unavailable; `pg_trgm` available. Search ticket must provide a real pgvector-capable deployment/CI path without silently substituting fake semantics, and preserve lexical degradation when vectors are unavailable.
 - Isolated pgvector test container prepared: `hr2-v1-vector-tests`, localhost port `56432`, PostgreSQL18 with vector0.8.7/pg_trgm1.6 available. Test-only connection setup: `/tmp/opencode/hr-v1-vector-test-env.md`; host/dev database untouched. Search and later migrations can be tested here.
 - Additional coordinator/implementer context: `/tmp/opencode/hr-v1-agent-contract.md`, `/tmp/opencode/hr-v1-google-auth-notes.md`, `/tmp/opencode/hr-v1-acceptance-checklist.md`.

@@ -20,3 +20,11 @@
 Implemented authenticated raw-MIME ingestion, bounded streaming, envelope-recipient Org lookup, durable local/S3 blob storage before HTTP acknowledgement, unique delivery keys, async Postgres receipt processing, MIME attachments/body fallback, Persian headers/filenames, ClamAV fail-closed quarantine and rescan. Added the thin Cloudflare Worker with backup forwarding and SMTP rejection, placeholder configuration, and a local synthetic-MIME/replay CLI. Per the user's instruction, no real domain, DNS or cloud deployment was configured. Settings show the per-Org address when enabled. See [runtime and mock-test instructions](../../../docs/resume-ingestion.md).
 
 Validation: backend API/worker/storage/quarantine/isolation tests, 4 Node Worker tests and browser verification of Persian MIME plus duplicate delivery. Scanner/model/remote storage transports are mocked in automated integration tests; no live email was sent.
+
+## Comments
+
+- 2026-10-31: [Repair 29](29-review-regressions.md) restores the actual MUI
+  `/settings/ingestion` screen and navigation, forwarding address/copy and clear
+  disabled-service guidance, plus visible mail failures in `/review`. Static
+  build/lint only for UI this run; prior browser evidence is historical. Real
+  domain/email/cloud deployment remains unverified and untouched.

@@ -22,6 +22,7 @@ from app.parsing.llm import get_extractor
 from app.parsing.schema import ResumeExtractionData, build_profile
 from app.profiles import (
     activity,
+    apply_human_edits,
     fields,
     lock_org,
     merge_candidates,
@@ -200,11 +201,10 @@ async def edit_profile(
         for path, value in fields(profile).items()
         if value != before.get(path)
     }
-    candidate.profile = profile
     candidate.new_resume_received = False
-    candidate.human_fields = sorted(set(candidate.human_fields or []) | set(changed))
-    sync_candidate(candidate)
-    activity(session, candidate, "profile_edited", ctx.user.id, changes=changed)
+    await apply_human_edits(
+        session, candidate, {path: value["new"] for path, value in changed.items()}, ctx.user.id
+    )
     await session.commit()
     return {"id": candidate.id}
 
@@ -235,6 +235,8 @@ async def decide_change(
     if change is None:
         raise HTTPException(404, "CHANGE_NOT_FOUND")
     if change.status != "pending":
+        raise HTTPException(409, "CHANGE_ALREADY_RESOLVED")
+    if change.resume_version != candidate.latest_resume_version:
         raise HTTPException(409, "CHANGE_ALREADY_RESOLVED")
     if data.action == "accept":
         if fields(candidate.profile).get(change.field_path) != change.old_value:

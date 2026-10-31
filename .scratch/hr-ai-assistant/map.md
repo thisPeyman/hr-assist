@@ -13,7 +13,7 @@ A **build-ready spec** at `.scratch/hr-ai-assistant/spec.md` for v1 of a SaaS AI
 - **v1 AI actions**: resume summaries, natural-language candidate search, candidate compare, draft outreach emails. **Deferred: ranking/scoring** (EU AI Act / NYC LL144 high-risk exposure).
 - **Ingestion (v1)**: manual upload + email-in (forward to an app address). No job-board or shared-inbox auto-scanning.
 - **Calendar (v1)**: Google Calendar only, with a seam for Outlook later.
-- **Stack constraints**: Python backend (AI ecosystem), React + shadcn/ui frontend, Postgres (pgvector allowed). **Build-not-buy**: the only external paid dependency is the OpenAI API. Standard cloud-AI privacy posture is acceptable for now.
+- **Stack constraints**: Python backend (AI ecosystem), React + Material UI/Emotion frontend (2026-10-31 continuation decision supersedes shadcn/ui), Postgres (pgvector allowed). **Build-not-buy**: the only external paid dependency is the OpenAI API. Standard cloud-AI privacy posture is acceptable for now.
 - **Skills**: decision tickets → call `grilling` + `domain-modeling`; GUI ticket → call `prototype`; research tickets resolve via subagents.
 - **Domain glossary**: lives at `GLOSSARY.md` at the repo root (repo convention overrides the domain-modeling skill's `CONTEXT.md` naming). Glossary only — no implementation detail.
 - **Tracker**: local markdown, see `docs/agents/issue-tracker.md` — `Type:`/`Status:`/`Blocked by:` lines, `## Answer` on resolve, frontier scan in `.scratch/hr-ai-assistant/issues/`.
@@ -40,6 +40,7 @@ A **build-ready spec** at `.scratch/hr-ai-assistant/spec.md` for v1 of a SaaS AI
 
 - [13 - Editable profile and merge](issues/13-editable-profile-diff-merge.md): implemented candidate workspace, normalized matching, protected corrections, diff decisions, latest-only retention and merge transfer under tenant isolation.
 - [14 - Cached AI summary](issues/14-cached-ai-resume-summary.md): cache, precomputation, regeneration, guardrails and 20-case offline evaluation implemented. Groq access recovered on retest; a real 173-word Persian summary was persisted. Full live golden evaluation remains pending.
+- [29 - Review regressions](issues/29-review-regressions.md): repair the current MUI continuation's missing review/settings routes; preserve Candidate/Activity on resume deletion; reuse identity/reconciliation/version/summary paths for human ingestion; explicit stale-safe corrections and retired proposals; Jalali diff/certificate presentation. API/Postgres regressions and static frontend validation; browser/live acceptance deferred.
 
 ## Not yet specified
 

@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import {
   AppBar,
   Avatar,
   Box,
   Button,
+  Chip,
   Divider,
   Drawer,
   IconButton,
@@ -16,9 +17,9 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material"
-import { FileText, LogOut, Menu, Users } from "lucide-react"
+import { FileText, Inbox, LogOut, Menu, Settings, Users } from "lucide-react"
 import { useAuth } from "@/auth"
-import { logout } from "@/lib/api"
+import { fetchIngestionSettings, logout } from "@/lib/api"
 
 export function Wordmark() {
   return (
@@ -39,6 +40,8 @@ export function Wordmark() {
 const navigation = [
   { path: "/candidates", title: "بانک کاندیداها", icon: Users },
   { path: "/resumes", title: "رزومه‌های دریافت‌شده", icon: FileText },
+  { path: "/review", title: "صف بازبینی", icon: Inbox },
+  { path: "/settings/ingestion", title: "تنظیمات دریافت", icon: Settings },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -48,6 +51,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
+  const [reviewCount, setReviewCount] = useState<number | null>(null)
+  useEffect(() => {
+    let active = true
+    const load = () => {
+      fetchIngestionSettings().then(data => { if (active) setReviewCount(data.review_count) })
+        .catch(() => { if (active) setReviewCount(null) })
+    }
+    load()
+    window.addEventListener("ingestion-changed", load)
+    window.addEventListener("focus", load)
+    return () => {
+      active = false
+      window.removeEventListener("ingestion-changed", load)
+      window.removeEventListener("focus", load)
+    }
+  }, [])
   async function signOut() {
     setLeaving(true)
     try {
@@ -87,6 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               primary={title}
               slotProps={{ primary: { sx: { fontSize: 13, fontWeight: 600 } } }}
             />
+            {path === "/review" && reviewCount !== null && <Chip size="small" color={reviewCount ? "warning" : "default"} label={reviewCount.toLocaleString("fa-IR")} />}
           </ListItemButton>
         ))}
       </List>
@@ -123,6 +143,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </Stack>
           <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <Button component={Link} to="/review" size="small" aria-label={`صف بازبینی؛ ${reviewCount === null ? "شمارش در دسترس نیست" : reviewCount.toLocaleString("fa-IR") + " مورد"}`}>
+              بازبینی {reviewCount === null ? "—" : reviewCount.toLocaleString("fa-IR")}
+            </Button>
             <Box
               sx={{ display: { xs: "none", sm: "block" }, textAlign: "right" }}
             >

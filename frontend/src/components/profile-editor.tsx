@@ -315,6 +315,13 @@ export function ProfileEditor({
             })
           }
         />
+        <TextField
+          label="یادداشت‌های استخراج؛ هر مورد در یک خط"
+          multiline
+          minRows={2}
+          value={profile.extraction_notes.join("\n")}
+          onChange={(event) => onChange({ ...profile, extraction_notes: event.target.value.split("\n").filter(Boolean) })}
+        />
         <Stack direction="row" spacing={2}>
           <Button
             type="submit"

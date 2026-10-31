@@ -115,3 +115,22 @@ Worker پیام خام را همراه `X-Webhook-Secret` و گیرندهٔ وا
 در تست‌های خودکار و مرورگری، خروجی مدل، OCR، تبدیل LibreOffice و اسکن آنتی‌ویروس ساختگی بوده‌اند؛ پردازش PDF/تصویر، دیتابیس، HTTP و رابط مرورگر واقعی بوده‌اند. اجرای واقعی OCR فارسی/انگلیسی، LibreOffice، پایگاه کامل ClamAV، مدل پولی و سرویس ابری هنوز در این محیط تأیید نشده است. این ابزارهای سیستمی در زمان اجرای کار روی ماشین حاضر نبودند؛ برنامه در نبود آن‌ها مسیر جایگزین یا وضعیت صریح بررسی را نشان می‌دهد.
 
 تنظیمات دسترسی ادمین تست باید به دیتابیس قابل‌آزمایش اشاره کند. مجموعهٔ تست فقط دیتابیس ثابت `hr_test` را حذف و دوباره ایجاد می‌کند؛ برای اجرای محلی `HR_TEST_ADMIN_URL` را طبق راهنمای اصلی پروژه تنظیم کنید.
+
+## Repair 29 — current UI and verification boundary (2026-10-31)
+
+The Material UI continuation now actually registers `/review` and
+`/settings/ingestion`, with links and the unresolved count in the desktop/mobile
+shell and header. Review includes queue/history, full partial-profile editing,
+original download and safe preview, accept/dismiss, quarantine rescan and mail
+receipt failures. Settings show the org forwarding address and disabled-service
+guidance. Review decisions refresh counts; upload and window focus refresh the
+shell count. Failed receipt recovery remains manual upload or operator replay
+of the durable message; there is no invented retry API or live mail setup.
+
+Prior browser-verification statements above describe historical work, not
+acceptance of this continuation. This repair follows the confirmed API/Postgres
+test boundary only; frontend validation is static lint/typecheck/build. Desktop,
+mobile, clipboard, safe-preview and screen-reader browser acceptance of the new
+screens is deferred. No DNS, real mail, paid inference or remote storage calls
+were used. Diff date values and certificate dates now use the existing Jalali
+presentation helper without changing API/storage values.
