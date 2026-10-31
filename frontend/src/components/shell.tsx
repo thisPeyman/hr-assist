@@ -14,10 +14,11 @@ import {
   ListItemIcon,
   ListItemText,
   Stack,
+  TextField,
   Toolbar,
   Typography,
 } from "@mui/material"
-import { BriefcaseBusiness, Columns3, FileText, Inbox, LogOut, Menu, Settings, Users } from "lucide-react"
+import { BriefcaseBusiness, Columns3, FileText, Inbox, LogOut, Menu, Search, Settings, Users } from "lucide-react"
 import { useAuth } from "@/auth"
 import { fetchIngestionSettings, logout } from "@/lib/api"
 
@@ -38,6 +39,7 @@ export function Wordmark() {
 }
 
 const navigation = [
+  { path: "/search", title: "جست‌وجوی کاندیدا", icon: Search },
   { path: "/board", title: "برد استخدام", icon: Columns3 },
   { path: "/roles", title: "فرصت‌های شغلی", icon: BriefcaseBusiness },
   { path: "/candidates", title: "بانک کاندیداها", icon: Users },
@@ -54,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [leaving, setLeaving] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
   const [reviewCount, setReviewCount] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   useEffect(() => {
     let active = true
     const load = () => {
@@ -138,7 +141,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu size={22} />
             </IconButton>
             <Link
-              to="/board"
+              to="/search"
               style={{ textDecoration: "none", color: "inherit" }}
             >
               <Wordmark />
@@ -173,6 +176,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Button>
           </Stack>
         </Toolbar>
+        {pathname !== "/search" ? <Box component="form" onSubmit={e => { e.preventDefault(); if (searchQuery.trim()) navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`) }} sx={{ display: "flex", gap: 1, px: { xs: 2, sm: 3 }, pb: 1.5 }}>
+          <TextField size="small" fullWidth label="جست‌وجو در تمام بانک کاندیداها" placeholder="مهارت، صنعت، سابقه…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} slotProps={{ htmlInput: { maxLength: 1000 } }} />
+          <Button type="submit" disabled={!searchQuery.trim()} startIcon={<Search size={17} />}>جست‌وجو</Button>
+        </Box> : null}
       </AppBar>
       <Box sx={{ display: "flex", alignItems: "flex-start" }}>
         <Box
@@ -185,8 +192,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             borderInlineEnd: "1px solid",
             borderColor: "divider",
             position: "sticky",
-            top: 72,
-            height: "calc(100svh - 72px)",
+            top: pathname === "/search" ? 72 : 128,
+            height: pathname === "/search" ? "calc(100svh - 72px)" : "calc(100svh - 128px)",
           }}
         >
           {menu}

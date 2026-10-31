@@ -236,6 +236,8 @@ async def decide_change(
         candidate.profile = profile
         candidate.human_fields = sorted(set(candidate.human_fields or []) | {change.field_path})
         sync_candidate(candidate)
+        from app.search_documents import refresh_document
+        await refresh_document(session, candidate)
     change.status = "accepted" if data.action == "accept" else "rejected"
     activity(
         session,

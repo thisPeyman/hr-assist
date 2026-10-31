@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def action_prompt(action: str, version: str = "v1", shared_version: str = "v1") -> str:
-    if action not in {"resume_summary"}:
+    if action not in {"resume_summary", "candidate_search"}:
         raise ValueError("unknown AI action")
     folder = Path(__file__).parent / "prompts"
     return (

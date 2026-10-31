@@ -151,6 +151,8 @@ async def reconcile(session, candidate, incoming, version, actor=None):
                 proposed.append(path)
     candidate.profile = current
     sync_candidate(candidate)
+    from app.search_documents import refresh_document
+    await refresh_document(session, candidate)
     if filled or proposed:
         activity(
             session,
@@ -390,6 +392,8 @@ async def attach_profile(session, resume, incoming, actor=None):
         candidate._profile_before_attachment = None
         session.add(candidate)
         await session.flush()
+        from app.search_documents import refresh_document
+        await refresh_document(session, candidate)
         event = "resume_added"
     resume.candidate_id = candidate.id
     candidate.latest_resume_version = resume.sha256
@@ -419,6 +423,8 @@ async def apply_human_edits(session, candidate, values, actor=None):
     candidate.profile = profile
     candidate.human_fields = sorted(set(candidate.human_fields or []) | set(values))
     sync_candidate(candidate)
+    from app.search_documents import refresh_document
+    await refresh_document(session, candidate)
     if values:
         await session.execute(
             update(ProfileChange)

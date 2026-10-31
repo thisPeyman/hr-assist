@@ -18,6 +18,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Identity,
@@ -31,6 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import UserDefinedType
 
 
 class Base(DeclarativeBase):
@@ -161,6 +163,8 @@ class Candidate(Base):
     # Structured, HR-editable Profile (GLOSSARY) — raw model JSON lives in
     # resume_extractions; this is the reviewed source of truth.
     profile: Mapped[dict | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"))
+    years_experience_total: Mapped[float | None] = mapped_column(Float)
+    experience_computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -460,3 +464,41 @@ class Role(Base):
         UniqueConstraint("org_id", "id"),
         CheckConstraint("status in ('draft','open','paused','closed')"),
     )
+
+
+class Vector(UserDefinedType):
+    """Wire vector literals as text; cosine arithmetic stays in pgvector SQL."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw):
+        return "vector"
+
+
+class CandidateSearchDoc(Base):
+    __tablename__ = "candidate_search_docs"
+    candidate_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"), index=True)
+    search_text: Mapped[str] = mapped_column(Text)
+    normalized_name: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[str | None] = mapped_column(Vector())
+    embedding_model: Mapped[str] = mapped_column(Text)
+    embedding_dimensions: Mapped[int] = mapped_column(Integer)
+    embedding_status: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "candidate_id"], ["candidates.org_id", "candidates.id"], ondelete="CASCADE"
+        ),
+    )
+
+
+class SearchQueryCache(Base):
+    __tablename__ = "search_query_cache"
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orgs.id", ondelete="CASCADE"), primary_key=True
+    )
+    query_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    dsl: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

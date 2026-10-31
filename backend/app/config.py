@@ -2,6 +2,7 @@
 
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,13 +10,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="HR_", env_file=".env", extra="ignore")
 
     # Connection the app itself uses: non-superuser role created by migration 0002.
-    app_database_url: str = (
-        "postgresql+asyncpg://hr_app:hr_app_dev@127.0.0.1:5432/hr_dev"
-    )
+    app_database_url: str = "postgresql+asyncpg://hr_app:hr_app_dev@127.0.0.1:5432/hr_dev"
     # Privileged connection used only by Alembic (schema owner runs migrations).
-    migration_database_url: str = (
-        "postgresql+asyncpg://peyman@/postgres?host=/var/run/postgresql"
-    )
+    migration_database_url: str = "postgresql+asyncpg://peyman@/postgres?host=/var/run/postgresql"
     # Password assigned to the hr_app login role when migrations (re)create it.
     app_db_password: str = "hr_app_dev"
 
@@ -64,6 +61,14 @@ class Settings(BaseSettings):
     libreoffice_command: str = "soffice"
     resume_max_pages: int = 20
     vision_enabled: bool = True
+
+    search_query_model: str = ""
+    search_api_key: str = ""
+    search_base_url: str | None = None
+    search_embedding_model: str = ""
+    search_embedding_dimensions: int = Field(default=1536, ge=1, le=16000)
+    search_embedding_api_key: str = ""
+    search_embedding_base_url: str | None = None
 
 
 settings = Settings()

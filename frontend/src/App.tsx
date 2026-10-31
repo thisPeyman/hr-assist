@@ -24,6 +24,7 @@ const ReviewPage = lazy(() => import("@/pages/review").then(module => ({ default
 const IngestionSettingsPage = lazy(() => import("@/pages/ingestion-settings").then(module => ({ default: module.IngestionSettingsPage })))
 const PipelinePage = lazy(() => import("@/pages/pipeline").then(module => ({ default: module.PipelinePage })))
 const RolesPage = lazy(() => import("@/pages/roles").then(module => ({ default: module.RolesPage })))
+const SearchPage = lazy(() => import("@/pages/search").then(module => ({ default: module.SearchPage })))
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth()
@@ -49,6 +50,7 @@ export default function App() {
       }
     >
       <Routes>
+        <Route path="/search" element={<Protected><SearchPage /></Protected>} />
         <Route path="/board" element={<Protected><PipelinePage /></Protected>} />
         <Route path="/roles" element={<Protected><RolesPage /></Protected>} />
         <Route path="/roles/:roleId" element={<Protected><PipelinePage /></Protected>} />
@@ -88,7 +90,7 @@ export default function App() {
             </Protected>
           }
         />
-        <Route path="*" element={<Navigate to="/board" replace />} />
+        <Route path="*" element={<Navigate to="/search" replace />} />
       </Routes>
     </Suspense>
   )
