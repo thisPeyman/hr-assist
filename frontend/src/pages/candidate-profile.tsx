@@ -30,6 +30,7 @@ import {
 import { AppShell } from "@/components/shell"
 import { ProfileEditor } from "@/components/profile-editor"
 import { AddToRoleButton } from "@/components/pipeline-controls"
+import { SummaryFacts } from "@/components/summary-facts"
 import {
   candidateAction,
   fetchCandidateWorkspace,
@@ -351,6 +352,14 @@ export function CandidatePage() {
             </Stack>
             {data.summary?.content ? (
               <>
+                {data.summary.content.facts ? (
+                  <SummaryFacts facts={data.summary.content.facts} />
+                ) : (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    این خلاصه با قرارداد قدیمی ذخیره شده است؛ پوشش دسته‌ها تأیید نشده است.
+                    برای تولید اطلاعات مبنا از «بازتولید دستی» استفاده کنید.
+                  </Alert>
+                )}
                 <Typography
                   sx={{ lineHeight: 2.2, fontSize: 14, whiteSpace: "pre-wrap" }}
                 >
@@ -397,11 +406,14 @@ export function CandidatePage() {
             )}
             {data.summary?.error && (
               <Alert severity="warning" sx={{ mt: 2 }}>
+                {data.summary.content ? "خلاصهٔ موفق قبلی حفظ شده است. " : ""}
                 {data.summary.error === "provider_access_denied"
                   ? "سرویس AI دسترسی را رد کرده است (403)."
-                  : data.summary.error === "provider_authentication_failed"
-                    ? "کلید سرویس AI پذیرفته نشد."
-                    : data.summary.error === "provider_limit_reached"
+                    : data.summary.error === "provider_authentication_failed"
+                      ? "کلید سرویس AI پذیرفته نشد."
+                      : data.summary.error === "invalid_summary"
+                        ? "خروجی AI با قرارداد خلاصه سازگار نبود و ذخیره نشد."
+                      : data.summary.error === "provider_limit_reached"
                       ? "محدودیت اعتبار یا تعداد درخواست سرویس AI اعمال شده است."
                       : "تولید آخر خلاصه موفق نبود."}{" "}
                 پس از بررسی اتصال AI، بازتولید دستی را اجرا کنید.

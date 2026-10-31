@@ -42,7 +42,11 @@ class Extractor:
         if self.fail_summary:
             raise RuntimeError("simulated provider outage")
         assert "full_name" not in str(data) and "phone" not in data
-        return {"text": SUMMARY_TEXT, "unclear_or_missing": [], "grounded_fields": ["skills"]}
+        return {
+            "text": SUMMARY_TEXT,
+            "unclear_or_missing": [],
+            "grounded_fields": ["skills"] if data.get("skills") else [],
+        }
 
 
 @pytest.fixture(autouse=True)
@@ -86,6 +90,10 @@ async def test_corrections_diffs_latest_only_and_summary_cache(api_client, app_s
     assert two["candidate"]["id"] == candidate
     current = (await api_client.get(f"/api/candidates/{candidate}/workspace")).json()
     assert current["profile"]["headline"] == "Human corrected title"
+    # Automated ingest snapshots incoming extraction, not the accepted Profile.
+    assert current["summary"]["content"]["facts"]["headline"]["items"][0]["value"] == (
+        "New extracted title"
+    )
     assert current["profile"]["contact"]["location"] is None
     assert current["profile"]["education"]
     assert current["new_resume_received"] is True
@@ -107,6 +115,10 @@ async def test_corrections_diffs_latest_only_and_summary_cache(api_client, app_s
         "status"
     ] == "ready"
     assert fake.summary_calls == 3
+    manual = (await api_client.get(f"/api/candidates/{candidate}/workspace")).json()
+    assert manual["summary"]["content"]["facts"]["headline"]["items"][0]["value"] == (
+        "Human corrected title"
+    )
     events = (await api_client.get(f"/api/candidates/{candidate}/workspace")).json()["activity"]
     assert {
         "profile_edited",
@@ -194,7 +206,7 @@ async def test_summary_failure_is_cached_and_manual_retry_recovers(api_client):
 
 async def test_new_profile_actions_are_tenant_scoped(api_client):
     await signup(api_client, "private-profile@example.com", "Private")
-    install([extraction_payload()])
+    fake = install([extraction_payload()])
     candidate = (await upload(api_client, b"Private resume text")).json()["candidate"]["id"]
     await api_client.post("/auth/logout")
     await signup(api_client, "outsider@example.com", "Outsider")
@@ -206,6 +218,7 @@ async def test_new_profile_actions_are_tenant_scoped(api_client):
     assert (
         await api_client.post(f"/api/candidates/{candidate}/notes", json={"body": "Forged"})
     ).status_code == 404
+    assert fake.summary_calls == 1
 
 
 def test_normalized_contacts_and_safe_summary_grounding():
@@ -247,6 +260,9 @@ async def test_golden_grounding_and_contract(case):
     assert 120 <= len(result.text.split()) <= 180
     for label in case["missing"]:
         assert any(label in gap for gap in result.unclear_or_missing)
+    for key, values in case.get("expected", {}).items():
+        assert [item["value"] for item in result.facts[key]["items"]] == values
+        assert result.facts[key]["state"] == ("supplied" if values else "unknown")
 
 
 async def test_email_phone_bridge_merges_existing_people(api_client):

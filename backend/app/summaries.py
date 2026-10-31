@@ -4,15 +4,16 @@ import copy
 import re
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import select
 
 from app.ai.prompting import action_prompt
 from app.config import settings
 from app.models import ResumeSummary
 from app.profiles import activity
+from app.summary_facts import evidence_snapshot, meaningful, missing_labels, project_facts
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 GROUNDING_FIELDS = (
     "headline",
     "work_experience",
@@ -28,7 +29,10 @@ SUMMARY_SCHEMA = {
     "properties": {
         "text": {"type": "string"},
         "unclear_or_missing": {"type": "array", "items": {"type": "string"}},
-        "grounded_fields": {"type": "array", "items": {"type": "string"}},
+        "grounded_fields": {
+            "type": "array",
+            "items": {"type": "string", "enum": [*GROUNDING_FIELDS, "location"]},
+        },
     },
     "required": ["text", "unclear_or_missing", "grounded_fields"],
     "additionalProperties": False,
@@ -36,9 +40,11 @@ SUMMARY_SCHEMA = {
 
 
 class SummaryData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     text: str
     unclear_or_missing: list[str] = Field(max_length=20)
-    grounded_fields: list[str] = Field(min_length=1)
+    grounded_fields: list[str]
 
     @field_validator("unclear_or_missing")
     @classmethod
@@ -61,10 +67,20 @@ class SummaryData(BaseModel):
 
     @field_validator("grounded_fields")
     @classmethod
-    def valid_evidence(cls, value):
+    def valid_evidence(cls, value, info):
         if any(field not in (*GROUNDING_FIELDS, "location") for field in value):
             raise ValueError("evidence must reference supplied fields")
+        if info.context and any(not meaningful(info.context.get(field)) for field in value):
+            raise ValueError("evidence field has no supplied value")
         return value
+
+
+class GeneratedSummary(SummaryData):
+    # Up to 20 validated model gaps plus 12 deterministic category/history gaps.
+    unclear_or_missing: list[str] = Field(max_length=32)
+    contract_version: int = 2
+    facts: dict
+    evidence: dict
 
 
 def summary_prompt():
@@ -73,14 +89,25 @@ def summary_prompt():
 
 def guardrails(text):
     if re.search(
-        r"\b(جنسیت|تأهل|مذهب|قومیت|نژاد|ملیت|معلولیت|بیماری|سن|متأهل|مجرد|gender|religion|ethnicity|disability)\b",
+        r"\b(جنسیت|تأهل|مذهب|قومیت|نژاد|ملیت|معلولیت|بیماری|سن|متأهل|مجرد|"
+        r"gender|religion|ethnicity|disability|age|nationality|marital\s+status|"
+        r"race|health|appearance|family\s+status)\b",
         text,
         re.I,
     ):
         raise ValueError("protected characteristics must not appear")
     if any(
-        phrase in text
-        for phrase in ("پیشنهاد استخدام", "بهترین گزینه", "مناسب استخدام", "استخدام او توصیه")
+        phrase in text.casefold()
+        for phrase in (
+            "پیشنهاد استخدام",
+            "بهترین گزینه",
+            "مناسب استخدام",
+            "استخدام او توصیه",
+            "recommend hiring",
+            "best candidate",
+            "suitable for hiring",
+            "hire this",
+        )
     ):
         raise ValueError("summary must be descriptive, not evaluative")
 
@@ -132,39 +159,19 @@ async def generate_summary_data(profile, generator):
     for attempt in range(2):
         payload = await method(data, repair=repair)
         try:
-            result = SummaryData.model_validate(payload)
+            result = SummaryData.model_validate(payload, context=data)
             break
         except ValidationError as exc:
             if attempt == 1:
                 raise
             repair = [error["msg"] for error in exc.errors()][:5]
-    missing = {
-        "headline": "عنوان حرفه‌ای",
-        "work_experience": "سوابق کاری",
-        "skills": "مهارت‌ها",
-        "industries": "صنایع",
-        "education": "تحصیلات",
-        "languages": "زبان‌ها",
-        "location": "محل زندگی",
-    }
+    facts = project_facts(data)
     result.unclear_or_missing = list(
-        dict.fromkeys(
-            result.unclear_or_missing
-            + [
-                f"{label} در رزومه ذکر نشده است"
-                for key, label in missing.items()
-                if not data.get(key)
-            ]
-        )
+        dict.fromkeys(result.unclear_or_missing + missing_labels(data, facts))
     )
-    if data["experience_years"] is None:
-        result.unclear_or_missing = list(
-            dict.fromkeys(
-                result.unclear_or_missing
-                + ["سابقهٔ کل از تاریخ‌های رزومه به‌طور قطعی قابل محاسبه نیست"]
-            )
-        )
-    return result
+    return GeneratedSummary(
+        **result.model_dump(), facts=facts, evidence=evidence_snapshot(data, facts)
+    )
 
 
 async def ensure_summary(
@@ -188,11 +195,13 @@ async def ensure_summary(
             prompt_version=PROMPT_VERSION,
         )
         session.add(row)
-    row.model = settings.resume_summary_model or settings.resume_extract_model
-    row.prompt_version = PROMPT_VERSION
+    attempted_model = settings.resume_summary_model or settings.resume_extract_model
     try:
         result = await generate_summary_data(profile, generator)
         row.content = result.model_dump()
+        # These columns describe the retained successful content, not a failed attempt.
+        row.model = attempted_model
+        row.prompt_version = PROMPT_VERSION
         row.status, row.error = "ready", None
         row.generated_at = datetime.now(UTC)
     except Exception as exc:
@@ -216,7 +225,7 @@ async def ensure_summary(
             actor,
             resume_version=version,
             status=row.status,
-            model=row.model,
+            model=attempted_model,
             prompt_version=PROMPT_VERSION,
         )
     await session.flush()

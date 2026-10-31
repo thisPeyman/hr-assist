@@ -156,6 +156,11 @@ const PERSIAN_ERRORS: Record<string, string> = {
   UNKNOWN: "خطایی رخ داد؛ دوباره تلاش کنید.",
 }
 
+export interface SummaryCategory {
+  state: "supplied" | "partial" | "unknown"
+  items: { value: string | number | Record<string, string>; evidence: string[] }[]
+}
+
 export interface CandidateWorkspace {
   id: string
   full_name: string
@@ -163,7 +168,7 @@ export interface CandidateWorkspace {
   resume_id: string | null
   resume_version: string | null
   new_resume_received: boolean
-  summary: { status: string; content: { text: string; unclear_or_missing: string[]; grounded_fields: string[] } | null; error: string | null; generated_at: string | null; model: string | null; prompt_version: string } | null
+  summary: { status: string; coverage_status: "structured_v2" | "legacy_unverified" | "unavailable"; content: { text: string; unclear_or_missing: string[]; grounded_fields: string[]; contract_version?: number; facts?: Record<string, SummaryCategory> } | null; error: string | null; generated_at: string | null; model: string | null; prompt_version: string } | null
   changes: { id: string; field_path: string; old_value: unknown; new_value: unknown; resume_version: string }[]
   duplicates: { id: string; full_name: string; email: string | null; phone: string | null; similarity: number }[]
   activity: { id: number; event_type: string; data: Record<string, unknown>; created_at: string }[]
