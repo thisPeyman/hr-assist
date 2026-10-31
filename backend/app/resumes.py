@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, or_, select, tuple_
+from sqlalchemy import or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
@@ -19,6 +19,7 @@ from app.models import (
     ResumeExtraction,
     ResumeFile,
 )
+from app.parsing.llm import get_extractor
 from app.review import blocked
 from app.tenancy import TenantContextDep
 
@@ -55,6 +56,7 @@ class ResumeEdit(BaseModel):
     headline: str | None = Field(default=None, max_length=300)
     summary: str | None = Field(default=None, max_length=5000)
     skills: list[str] = Field(default_factory=list, max_length=100)
+    expected_values: dict | None = None
 
     @field_validator("full_name")
     @classmethod
@@ -192,9 +194,14 @@ async def get_resume(resume_id: UUID, ctx: TenantContextDep, session: SessionDep
 
 @resumes_router.patch("/{resume_id}", response_model=ResumeDetail)
 async def update_resume(
-    resume_id: UUID, changes: ResumeEdit, ctx: TenantContextDep, session: SessionDep
+    resume_id: UUID,
+    changes: ResumeEdit,
+    ctx: TenantContextDep,
+    session: SessionDep,
+    generator: Annotated[object, Depends(get_extractor)],
 ) -> ResumeDetail:
-    from app.profiles import fields, lock_org, sync_candidate
+    from app.profiles import apply_human_edits, attach_profile, lock_org, put
+    from app.summaries import ensure_summary
 
     await lock_org(session, ctx.org.id)
     resume = await _resume(session, ctx.org.id, resume_id)
@@ -202,35 +209,50 @@ async def update_resume(
     if job is not None and blocked(job):
         raise HTTPException(status_code=409, detail="DOCUMENT_QUARANTINED")
     candidate = await _candidate(session, ctx.org.id, resume.candidate_id)
-    if candidate is None:
-        candidate = Candidate(org_id=ctx.org.id, full_name=changes.full_name.strip())
-        session.add(candidate)
-        await session.flush()
-        resume.candidate_id = candidate.id
-    before = fields(candidate.profile)
-    contact = dict((candidate.profile or {}).get("contact") or {})
-    contact.update(
-        full_name=changes.full_name.strip(),
-        email=changes.email,
-        phone=changes.phone,
-        location=changes.location,
-    )
-    profile = dict(candidate.profile or {})
-    profile.update(
-        contact=contact,
-        headline=changes.headline,
-        summary=changes.summary,
-        skills=[skill.strip() for skill in changes.skills if skill.strip()],
-    )
-    candidate.full_name = changes.full_name.strip()
-    candidate.email = changes.email
-    candidate.phone = changes.phone
-    candidate.location = changes.location
-    candidate.headline = changes.headline
-    candidate.profile = profile
-    changed = [path for path, value in fields(profile).items() if value != before.get(path)]
-    candidate.human_fields = sorted(set(candidate.human_fields or []) | set(changed))
-    sync_candidate(candidate)
+    values = {}
+    for key in changes.model_fields_set - {"expected_values"}:
+        path = f"contact.{key}" if key in {"full_name", "email", "phone", "location"} else key
+        value = getattr(changes, key)
+        values[path] = [s.strip() for s in value if s.strip()] if key == "skills" else value
+    # Omitted PATCH fields are not instructions to erase existing information.
+    profile = {}
+    if candidate is None and job is not None:
+        raw = (
+            await session.execute(
+                select(ResumeExtraction)
+                .where(
+                    ResumeExtraction.parse_job_id == job.id, ResumeExtraction.org_id == ctx.org.id
+                )
+                .order_by(ResumeExtraction.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if raw and raw.raw_json:
+            # Use the same safe partial-profile normalization as the review form.
+            from pydantic import ValidationError
+
+            from app.parsing.schema import ResumeExtractionData, build_profile
+
+            try:
+                profile = build_profile(ResumeExtractionData.model_validate(raw.raw_json))
+            except ValidationError:
+                pass
+    for path, value in values.items():
+        put(profile, path, value)
+    candidate = await attach_profile(session, resume, profile, ctx.user.id)
+    if getattr(resume, "_obsolete", False):
+        raise HTTPException(409, "RESUME_SUPERSEDED")
+    before = candidate._profile_before_attachment
+    if changes.expected_values is not None and before is not None:
+        for path in values:
+            if before.get(path) != values[path] and before.get(path) != changes.expected_values.get(
+                path
+            ):
+                raise HTTPException(409, "PROFILE_CHANGED_REFRESH")
+    await apply_human_edits(session, candidate, values, ctx.user.id)
+    profile = candidate.profile
+    changed = list(values)
+    await ensure_summary(session, candidate, resume.sha256, profile, generator)
     session.add(
         CandidateActivity(
             org_id=ctx.org.id,
@@ -250,21 +272,12 @@ async def update_resume(
 
 @resumes_router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resume(resume_id: UUID, ctx: TenantContextDep, session: SessionDep) -> None:
-    from app.profiles import lock_org
+    from app.profiles import activity, lock_org
 
     await lock_org(session, ctx.org.id)
     resume = await _resume(session, ctx.org.id, resume_id)
     candidate = await _candidate(session, ctx.org.id, resume.candidate_id)
-    await session.delete(resume)
-    await session.flush()
     if candidate is not None:
-        remaining = (
-            await session.execute(
-                select(func.count())
-                .select_from(ResumeFile)
-                .where(ResumeFile.org_id == ctx.org.id, ResumeFile.candidate_id == candidate.id)
-            )
-        ).scalar_one()
-        if remaining == 0:
-            await session.delete(candidate)
+        activity(session, candidate, "resume_deleted", ctx.user.id, resume_version=resume.sha256)
+    await session.delete(resume)
     await session.commit()

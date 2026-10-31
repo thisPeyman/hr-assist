@@ -64,9 +64,11 @@ async def lock_org(session, org_id):
 
 
 def fields(profile):
-    profile = profile or {}
+    profile = profile if isinstance(profile, dict) else {}
+    contact = profile.get("contact")
+    contact = contact if isinstance(contact, dict) else {}
     return {
-        **{f"contact.{key}": (profile.get("contact") or {}).get(key) for key in CONTACT_FIELDS},
+        **{f"contact.{key}": contact.get(key) for key in CONTACT_FIELDS},
         **{key: profile.get(key) for key in PROFILE_FIELDS},
     }
 
@@ -284,8 +286,18 @@ async def attach_profile(session, resume, incoming, actor=None):
                 )
             ).scalars()
         )
+    if resume.candidate_id is not None:
+        linked = (
+            await session.execute(
+                select(Candidate).where(
+                    Candidate.id == resume.candidate_id, Candidate.org_id == resume.org_id
+                )
+            )
+        ).scalar_one()
+        matches = [linked, *[item for item in matches if item.id != linked.id]]
     if matches:
         candidate = matches[0]
+        candidate._profile_before_attachment = fields(candidate.profile)
         for duplicate in matches[1:]:
             await merge_candidates(session, candidate, duplicate, actor)
         newest = (
@@ -322,6 +334,7 @@ async def attach_profile(session, resume, incoming, actor=None):
             human_fields=[],
         )
         sync_candidate(candidate)
+        candidate._profile_before_attachment = None
         session.add(candidate)
         await session.flush()
         event = "resume_added"
@@ -337,6 +350,35 @@ async def attach_profile(session, resume, incoming, actor=None):
     )
     await retain_latest(session, candidate)
     return candidate
+
+
+async def apply_human_edits(session, candidate, values, actor=None):
+    """Apply only intentional edits and retire proposals based on older values."""
+    profile = copy.deepcopy(candidate.profile or {})
+    before = fields(profile)
+    changed = {
+        path: {"old": before.get(path), "new": value}
+        for path, value in values.items()
+        if value != before.get(path)
+    }
+    for path, value in values.items():
+        put(profile, path, value)
+    candidate.profile = profile
+    candidate.human_fields = sorted(set(candidate.human_fields or []) | set(values))
+    sync_candidate(candidate)
+    if values:
+        await session.execute(
+            update(ProfileChange)
+            .where(
+                ProfileChange.candidate_id == candidate.id,
+                ProfileChange.org_id == candidate.org_id,
+                ProfileChange.status == "pending",
+                ProfileChange.field_path.in_(values),
+            )
+            .values(status="superseded")
+        )
+    if changed:
+        activity(session, candidate, "profile_edited", actor, changes=changed)
 
 
 async def similar_candidates(session, candidate):

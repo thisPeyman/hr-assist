@@ -28,6 +28,14 @@
 ## Progress
 
 - Planning: clean main checked; integration branch created.
+- Repair unit [29](issues/29-review-regressions.md): implemented current-MUI
+  review/settings surfaces and API identity/correction/version/summary repairs;
+  file deletion preserves Candidate and Activity. Added nine API/Postgres
+  regressions, red→green on reproduced defects. Backend 188 pass / one existing
+  missing-boto3 environment failure; frontend build and direct oxlint pass
+  (four pre-existing warnings), Ruff passes. No UI/browser tests or live calls;
+  browser acceptance and full live summary semantics remain pending. Parent
+  owns proxy dependency retry; no later ticket included in this repair.
 
 ## Review regression pointers
 

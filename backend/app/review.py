@@ -7,7 +7,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.parsing.documents import render_images, scan_attachment
 from app.parsing.extract_text import ExtractionError, sniff_kind
+from app.parsing.llm import get_extractor
 from app.parsing.schema import ResumeExtractionData, build_profile
 from app.tenancy import TenantContextDep
 
@@ -149,6 +150,9 @@ async def review_detail(job_id: UUID, ctx: TenantContextDep, session: SessionDep
         **job_item(job, resume),
         "raw_text": extraction.raw_text if extraction else None,
         "raw_json": extraction.raw_json if extraction else None,
+        "candidate_profile": (await session.get(Candidate, resume.candidate_id)).profile
+        if resume.candidate_id
+        else None,
     }
 
 
@@ -203,6 +207,8 @@ async def document_preview(
 class ReviewDecision(BaseModel):
     action: Literal["accept", "not_a_resume", "failed", "rescan"]
     extraction: ResumeExtractionData | None = None
+    edited_fields: list[str] | None = None
+    expected_values: dict = Field(default_factory=dict)
 
 
 @review_router.post("/review/{job_id}/resolve")
@@ -211,6 +217,7 @@ async def resolve_review(
     decision: ReviewDecision,
     ctx: TenantContextDep,
     session: SessionDep,
+    generator: Annotated[object, Depends(get_extractor)],
 ) -> dict:
     from app.profiles import lock_org
 
@@ -245,31 +252,47 @@ async def resolve_review(
     extraction = decision.extraction
     if extraction is None or not (extraction.contact.full_name or "").strip():
         raise HTTPException(422, "PROFILE_NAME_REQUIRED")
-    candidate = await session.get(Candidate, resume.candidate_id) if resume.candidate_id else None
-    if candidate is None:
-        candidate = Candidate(org_id=ctx.org.id, full_name=extraction.contact.full_name)
-        session.add(candidate)
-    else:
-        # Serialize corrections to the same profile, even across different review jobs.
-        candidate = (
-            await session.execute(
-                select(Candidate)
-                .where(Candidate.id == candidate.id, Candidate.org_id == ctx.org.id)
-                .with_for_update()
-            )
-        ).scalar_one()
-    candidate.full_name = extraction.contact.full_name.strip()
-    candidate.email = extraction.contact.email
-    candidate.phone = extraction.contact.phone
-    candidate.location = extraction.contact.location
-    candidate.headline = extraction.headline
-    candidate.profile = build_profile(extraction)
-    from app.profiles import fields, sync_candidate
+    extraction.contact.full_name = extraction.contact.full_name.strip()
+    from app.profiles import apply_human_edits, attach_profile, fields
+    from app.summaries import ensure_summary
 
-    candidate.human_fields = sorted(fields(candidate.profile))
-    sync_candidate(candidate)
-    await session.flush()
-    resume.candidate_id = candidate.id
+    raw = (
+        await session.execute(
+            select(ResumeExtraction)
+            .where(ResumeExtraction.parse_job_id == job.id, ResumeExtraction.org_id == ctx.org.id)
+            .order_by(ResumeExtraction.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    baseline = fields(raw.raw_json if raw else None)
+    incoming = build_profile(extraction)
+    incoming_fields = fields(incoming)
+    edited = decision.edited_fields
+    if edited is None:
+        edited = [path for path, value in incoming_fields.items() if value != baseline.get(path)]
+    if any(path not in incoming_fields for path in edited):
+        raise HTTPException(422, "INVALID_PROFILE")
+    candidate = await attach_profile(session, resume, incoming, ctx.user.id)
+    if getattr(resume, "_obsolete", False):
+        # Roll back all attachment side effects; old reviews never replace newer versions.
+        raise HTTPException(409, "RESUME_SUPERSEDED")
+    previous = candidate._profile_before_attachment
+    if decision.edited_fields is None and previous is not None:
+        # Legacy clients have no baseline token. Inferred edits can only replace
+        # the extraction value they actually saw; other conflicts remain diffs.
+        edited = [path for path in edited if previous.get(path) == baseline.get(path)]
+    for path in edited:
+        expected = decision.expected_values.get(path, baseline.get(path))
+        if (
+            previous is not None
+            and previous.get(path) != incoming_fields[path]
+            and previous.get(path) != expected
+        ):
+            raise HTTPException(409, "PROFILE_CHANGED_REFRESH")
+    await apply_human_edits(
+        session, candidate, {path: incoming_fields[path] for path in edited}, ctx.user.id
+    )
+    await ensure_summary(session, candidate, resume.sha256, candidate.profile, generator)
     session.add(
         CandidateActivity(
             org_id=ctx.org.id,

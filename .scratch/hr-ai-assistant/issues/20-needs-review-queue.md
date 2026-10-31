@@ -17,3 +17,12 @@
 Implemented `/review`, all-document history, visible counts on home/pool, tenant-scoped detail/download/PNG-preview APIs, editable partial Profile forms, human acceptance/dismissal, Activity entries, immutable raw extraction and protection against overwriting accepted Profiles on replay. Quarantined attachments cannot be downloaded or accepted; scanning can be retried. Added a local ingestion-settings screen and clear empty/error states.
 
 Validation: API tests exercise acceptance, dismissal, repeated decisions, provenance retention, quarantine protection and cross-Org access; Playwright/Edge verifies PDF preview, profile correction, dismissal/history and a 390px mobile viewport. A long-status mobile overflow was found and fixed. See [verification details](../../../docs/resume-ingestion.md).
+
+## Comments
+
+- 2026-10-31: Review found these screens absent from the latest MUI App routes,
+  despite historical completion text. [Repair 29](29-review-regressions.md)
+  implements queue/history, safe doc/partial full Profile, accept/dismiss/rescan,
+  mail failures and discoverable counts. Acceptance now preserves corrections
+  and identity/version invariants. API/Postgres regression tests plus static
+  frontend checks were run; no new browser verification, per user scope.

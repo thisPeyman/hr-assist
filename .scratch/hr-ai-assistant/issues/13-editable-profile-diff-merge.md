@@ -17,3 +17,12 @@
 ## Answer
 
 Implemented 2026-10-28: MUI candidate bank/detail/editing, normalized identity matching, preserved human corrections, empty-field fill, stale-safe proposals, latest-only files and transfer of notes/application links/history/summary versions. See [implementation and verification](../../../docs/profiles-and-summaries.md).
+
+## Comments
+
+- 2026-10-31: [Repair 29](29-review-regressions.md) closes human review/PATCH
+  bypasses of matching/reconciliation/retention, adds baseline-safe explicit
+  edits and supersedes stale proposals. Resume DELETE retains the person and
+  Activity; Admin erasure is still ticket 26. Jalali diff/certificate display
+  repaired. Verified through HTTP/Postgres and static frontend checks only;
+  this repair does not claim fresh browser acceptance.

@@ -137,6 +137,7 @@ const PERSIAN_ERRORS: Record<string, string> = {
   DOCUMENT_QUARANTINED: "این سند تا تکمیل بررسی ایمنی قابل پذیرش یا دریافت نیست.",
   DOCUMENT_ALREADY_RESOLVED: "این سند قبلاً تعیین تکلیف شده است؛ فهرست را تازه کنید.",
   PROFILE_NAME_REQUIRED: "نام کاندیدا را وارد کنید.",
+  RESUME_SUPERSEDED: "نسخهٔ جدیدتری از این رزومه دریافت شده است؛ پروندهٔ فرد را باز کنید.",
   LOGIN_BAD_CREDENTIALS: "رایانامه یا گذرواژه نادرست است.",
   REGISTER_USER_ALREADY_EXISTS: "این رایانامه قبلاً ثبت شده است.",
   PASSWORD_TOO_SHORT: "گذرواژه باید دست‌کم ۸ نویسه باشد.",
@@ -202,6 +203,7 @@ export interface ResumeEdit {
   headline: string | null
   summary: string | null
   skills: string[]
+  expected_values?: Record<string, unknown>
 }
 
 export async function fetchResumes(search = "", before?: string, signal?: AbortSignal): Promise<{ items: ResumeItem[]; next_cursor: string | null }> {
@@ -315,7 +317,9 @@ export async function uploadResume(file: File): Promise<UploadResult> {
     throw new ApiError(0, "NETWORK")
   }
   if (!res.ok) await throwApiError(res)
-  return (await res.json()) as UploadResult
+  const result = (await res.json()) as UploadResult
+  window.dispatchEvent(new Event("ingestion-changed"))
+  return result
 }
 
 export async function fetchCandidates(): Promise<CandidateSummary[]> {
@@ -351,6 +355,7 @@ export interface ReviewItem {
 export interface ReviewDetail extends ReviewItem {
   raw_text: string | null
   raw_json: Record<string, unknown> | null
+  candidate_profile: Record<string, unknown> | null
 }
 
 export interface ReviewList {
@@ -378,11 +383,12 @@ export async function fetchReviewDetail(id: string): Promise<ReviewDetail> {
 
 export async function resolveReview(
   id: string, action: "accept" | "not_a_resume" | "failed" | "rescan", profile?: CandidateProfile,
+  edits?: { edited_fields: string[]; expected_values: Record<string, unknown> },
 ): Promise<{ candidate_id: string | null }> {
   const res = await request(`/api/review/${id}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, extraction: profile ? {
+    body: JSON.stringify({ action, ...edits, extraction: profile ? {
       ...profile, is_resume: true, confidence: 1, needs_review: false,
     } : null }),
   })

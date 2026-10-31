@@ -20,6 +20,8 @@ const CandidatePage = lazy(() =>
     default: module.CandidatePage,
   })),
 )
+const ReviewPage = lazy(() => import("@/pages/review").then(module => ({ default: module.ReviewPage })))
+const IngestionSettingsPage = lazy(() => import("@/pages/ingestion-settings").then(module => ({ default: module.IngestionSettingsPage })))
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { me, loading } = useAuth()
@@ -45,6 +47,8 @@ export default function App() {
       }
     >
       <Routes>
+        <Route path="/review" element={<Protected><ReviewPage /></Protected>} />
+        <Route path="/settings/ingestion" element={<Protected><IngestionSettingsPage /></Protected>} />
         <Route
           path="/candidates"
           element={

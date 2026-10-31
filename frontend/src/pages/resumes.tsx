@@ -48,7 +48,7 @@ import {
   type ResumeItem,
 } from "@/lib/api"
 import { formatJalali } from "@/lib/jalali"
-import { formatDateRange, parseStatusLabel } from "@/lib/profile"
+import { formatDateRange, formatResumeDate, parseStatusLabel } from "@/lib/profile"
 import { reviewProfile } from "@/lib/review"
 
 function Status({ item }: { item: ResumeItem }) {
@@ -319,7 +319,7 @@ export function Profile({ detail }: { detail: ResumeDetail }) {
           </Typography>
           {profile.certifications.map((certificate, index) => (
             <Typography key={index} dir="auto" sx={{ fontSize: 13 }}>
-              {[certificate.name, certificate.issuer, certificate.date]
+              {[certificate.name, certificate.issuer, formatResumeDate(certificate.date)]
                 .filter(Boolean)
                 .join(" — ")}
             </Typography>
@@ -425,7 +425,14 @@ function ResumeDialog({
     setBusy(true)
     setError(null)
     try {
-      await updateResume(id, form)
+      const initial = reviewProfile(detail?.profile ?? null)
+      await updateResume(id, { ...form, expected_values: {
+        "contact.full_name": initial.contact.full_name,
+        "contact.email": initial.contact.email,
+        "contact.phone": initial.contact.phone,
+        "contact.location": initial.contact.location,
+        headline: initial.headline, summary: initial.summary, skills: initial.skills,
+      } })
       onSaved()
       onClose()
     } catch (cause) {
@@ -937,7 +944,7 @@ export function ResumesPage() {
           )}
           <DialogContentText>
             فایل «{deleting?.filename}» و نتیجهٔ تحلیل آن حذف می‌شود. این کار
-            قابل بازگشت نیست.
+            قابل بازگشت نیست. پروندهٔ فرد، یادداشت‌ها و تاریخچه حفظ می‌شوند.
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

@@ -37,7 +37,15 @@ async def test_resume_list_edit_delete(api_client):
     assert (await api_client.get(f"/api/resumes/{resume_id}")).status_code == 404
     assert (await api_client.get("/api/resumes")).json()["items"] == []
     candidate_id = uploaded["candidate"]["id"]
-    assert (await api_client.get(f"/api/candidates/{candidate_id}")).status_code == 404
+    candidate = await api_client.get(f"/api/candidates/{candidate_id}/workspace")
+    assert candidate.status_code == 200
+    assert candidate.json()["full_name"] == "Corrected name"
+    assert candidate.json()["resume_id"] is None
+    assert {event["event_type"] for event in candidate.json()["activity"]} >= {
+        "resume_added",
+        "resume_profile_edited",
+        "resume_deleted",
+    }
 
 
 async def test_resume_crud_is_tenant_scoped(api_client):
