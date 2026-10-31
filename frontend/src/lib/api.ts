@@ -131,6 +131,11 @@ const PERSIAN_ERRORS: Record<string, string> = {
   ROLE_NOT_FOUND: "فرصت شغلی پیدا نشد؛ فهرست را تازه کنید.",
   ROLE_NOT_OPEN: "برای افزودن کاندیدا، ابتدا فرصت شغلی را باز کنید.",
   INVALID_OWNER: "مسئول باید عضو فعال همین سازمان باشد.",
+  INVALID_MENTION: "گیرندهٔ اشاره باید عضو فعال همین سازمان باشد. فهرست همکاران را تازه‌سازی کنید.",
+  INACTIVE_NOTE_AUTHOR: "برای ثبت یا ویرایش یادداشت باید عضو فعال سازمان باشید.",
+  NOTE_NOT_FOUND: "یادداشت پیدا نشد یا در سازمان شما در دسترس نیست.",
+  NOTIFICATION_NOT_FOUND: "این اعلان در فهرست شخصی شما در دسترس نیست.",
+  EMPTY_NOTE: "متن یادداشت را وارد کنید.",
   INVALID_ROLE_TRANSITION: "این تغییر وضعیت مجاز نیست؛ صفحه را تازه کنید.",
   ROLE_TITLE_REQUIRED: "عنوان فرصت شغلی را وارد کنید.",
   APPLICATION_NOT_FOUND: "درخواست شغلی پیدا نشد؛ ممکن است ادغام شده باشد.",
@@ -172,7 +177,7 @@ export interface CandidateWorkspace {
   changes: { id: string; field_path: string; old_value: unknown; new_value: unknown; resume_version: string }[]
   duplicates: { id: string; full_name: string; email: string | null; phone: string | null; similarity: number }[]
   activity: { id: number; event_type: string; data: Record<string, unknown>; created_at: string }[]
-  notes: { id: string; body: string; created_at: string }[]
+  notes: CandidateNote[]
   applications: PipelineApplication[]
 }
 
@@ -398,7 +403,32 @@ export const editRole = (id: string, changes: Partial<Pick<PipelineRole, "title"
 export const addToRole = (role: string, candidate_id: string, owner_id: string | null = null) => pipelineRequest<{ id: string }>(`roles/${role}/applications`, "POST", { candidate_id, owner_id })
 export const moveApplication = (application: PipelineApplication, stage_id: string, context: string, reason: string | null) => pipelineRequest(`applications/${application.id}/stage`, "POST", { stage_id, expected_stage_id: application.stage_id, context, reason })
 export const assignApplication = (id: string, owner_id: string | null) => pipelineRequest(`applications/${id}/owner`, "PATCH", { owner_id })
-export const fetchApplication = (id: string, signal?: AbortSignal) => pipelineRequest<{ activity: ApplicationEvent[] }>(`applications/${id}`, "GET", undefined, signal)
+export const fetchApplication = (id: string, signal?: AbortSignal) => pipelineRequest<{ activity: ApplicationEvent[]; notes: CandidateNote[] }>(`applications/${id}`, "GET", undefined, signal)
+
+export interface NotePerson { id: string | null; email: string | null; active: boolean }
+export interface CandidateNote {
+  id: string
+  candidate_id: string
+  application_id: string | null
+  body: string
+  created_at: string
+  edited_at: string | null
+  author: NotePerson
+  editor: NotePerson | null
+  mention_user_ids: string[]
+  mentions: NotePerson[]
+}
+export interface InAppNotification {
+  id: string
+  kind: string
+  created_at: string
+  read_at: string | null
+  href: string | null
+}
+export const fetchMentionUsers = (signal?: AbortSignal) => pipelineRequest<{ items: PipelineOwner[] }>("notes/mention-users", "GET", undefined, signal)
+export const saveNote = (candidateId: string, applicationId: string | null, noteId: string | null, body: string, mention_user_ids: string[]) => pipelineRequest<CandidateNote>(noteId ? `notes/${noteId}` : applicationId ? `applications/${applicationId}/notes` : `candidates/${candidateId}/notes`, noteId ? "PUT" : "POST", { body, mention_user_ids })
+export const fetchNotifications = (signal?: AbortSignal) => pipelineRequest<{ items: InAppNotification[]; unread_count: number }>("notifications", "GET", undefined, signal)
+export const setNotificationRead = (id: string, read: boolean) => pipelineRequest(`notifications/${id}`, "PATCH", { read })
 
 export async function fetchCandidate(id: string): Promise<CandidateDetail> {
   const res = await request(`/api/candidates/${id}`)

@@ -285,12 +285,12 @@ async def test_hr_app_privileges_on_parsing_tables(superuser_engine):
             "resume_files": {"SELECT", "INSERT", "DELETE"},
             "parse_jobs": {"SELECT", "INSERT", "UPDATE"},  # status transitions
             "resume_extractions": {"SELECT", "INSERT"},
+            "candidate_notes": {"SELECT", "INSERT", "DELETE"},  # column-only edits, fixed author
             **{
                 table: {"SELECT", "INSERT", "UPDATE", "DELETE"}
                 for table in (
                     "profile_changes",
                     "resume_summaries",
-                    "candidate_notes",
                     "candidate_applications",
                 )
             },

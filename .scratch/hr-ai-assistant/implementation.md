@@ -29,6 +29,33 @@
 
 ## Progress
 
+- Ticket [17](issues/17-notes-mentions-notifications.md): completed authorized
+  API/database + usable Persian RTL MUI scope. Existing CandidateNote evolved,
+  not duplicated: Candidate/Application create/edit, original author + last editor,
+  active same-org explicit mentions, aggregate and Application-only views.
+  Migration0009 adds tenant FKs (including Candidate/Application consistency),
+  forced RLS, recipient-private notifications and narrow grants. Notification
+  dedupe preserves read state on unchanged/repeated/remove/re-add edits; stable
+  Note references follow manual and automatic same-Role coalescing Merge. Bell
+  count/list/read controls and scope-aware safe links; notifications never send
+  email. Helper ready for23/24 extension, without implementing18/scheduling.
+  - Red→green first HTTP test failed on existing missing Note author metadata;
+    seven new API/app-role DB tests and extended email/phone bridge Merge proof.
+    No-op concurrent edits, inactive attribution, Member editing, tenant/recipient
+    refusal and no external SMTP/HTTP boundary checks included.
+  - Exact full backend command from worktree `backend/`:
+    `HR_TEST_ADMIN_URL='postgresql+asyncpg://postgres:hr_v1_test_only@127.0.0.1:56432/postgres' HR_TEST_APP_URL='postgresql+asyncpg://hr_app:hr_app_dev@127.0.0.1:56432/hr_test' /home/peyman/Projects/me/hr2/backend/.venv/bin/python -m pytest -q`:
+    **278 passed**, disposable Docker PostgreSQL18/pgvector only, no host/dev DB.
+  - `/home/peyman/Projects/me/hr2/backend/.venv/bin/ruff check app tests migrations scripts`:
+    clean. Frontend `npm run build`, `npm test` (**25 existing utility tests**),
+    `npx --no-install oxlint`:pass (four pre-existing warnings; build retains
+    large-chunk advisory). Ignored node_modules symlink reuses main dependencies.
+  - Browser/visual/keyboard/mobile/new UI tests remain **deferred**, not passed,
+    per user seam. No paid/live providers, real email, deployment or dev migration.
+    No blocker at authorized seam. Contract and future erasure/extension inventory:
+    `docs/notes-and-notifications.md`. Integration base/tip `01b93bb` checked;
+    merge current integration before delivery. No subagents spawned.
+
 - Planning: clean main checked; integration branch created.
 - Repair unit [29](issues/29-review-regressions.md): implemented current-MUI
   review/settings surfaces and API identity/correction/version/summary repairs;

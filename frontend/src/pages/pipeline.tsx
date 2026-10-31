@@ -21,6 +21,7 @@ const eventLabels: Record<string, string> = {
   application_reopened: "همان درخواست بازگشایی شد", owner_changed: "مسئول تغییر کرد",
   application_merged: "درخواست‌های هم‌فرصت ادغام شدند؛ مرحلهٔ مقصد حفظ شد",
   legacy_application_imported: "درخواست قبلی با حفظ داده‌ها منتقل شد",
+  note_added: "یادداشت درخواست اضافه شد", note_edited: "یادداشت درخواست ویرایش شد",
 }
 
 export function PipelinePage() {
@@ -171,7 +172,8 @@ export function PipelinePage() {
                   <Button component={Link} to={`/candidates/${application.candidate_id}`} sx={{ p: 0, fontWeight: 750, justifyContent: "start", textAlign: "start" }}><span dir="auto">{application.full_name}</span></Button>
                   <Typography dir="auto" sx={{ fontSize: 12, mt: 0.5, mb: 1 }}>{application.headline ?? "عنوان حرفه‌ای ثبت نشده"}</Typography>
                   <Typography dir="auto" color="text.secondary" sx={{ fontSize: 11, mb: 1 }}>{application.role_title}</Typography>
-                  <OwnerBadge owners={owners} id={application.owner_id} />
+                   <OwnerBadge owners={owners} id={application.owner_id} />
+                   <Button component={Link} to={`/candidates/${application.candidate_id}?tab=notes&application=${application.id}`} size="small" sx={{ mt: 1 }}>یادداشت‌های درخواست</Button>
                   <Stack direction="row" sx={{ mt: 1, justifyContent: "space-between" }}>
                     <Button size="small" disabled={busy} onClick={() => startMove(application)}>جابه‌جایی</Button>
                     <Button size="small" disabled={busy} onClick={() => { setEvents(null); setHistoryError(null); setInspecting(application) }}>مسئول و تاریخچه</Button>

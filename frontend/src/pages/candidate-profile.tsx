@@ -16,7 +16,6 @@ import {
   Stack,
   Tab,
   Tabs,
-  TextField,
   Typography,
 } from "@mui/material"
 import {
@@ -31,6 +30,7 @@ import { AppShell } from "@/components/shell"
 import { ProfileEditor } from "@/components/profile-editor"
 import { AddToRoleButton } from "@/components/pipeline-controls"
 import { SummaryFacts } from "@/components/summary-facts"
+import { NotesPanel } from "@/components/notes-panel"
 import {
   candidateAction,
   fetchCandidateWorkspace,
@@ -94,6 +94,7 @@ const eventLabels: Record<string, string> = {
   ai_summary_regenerated: "خلاصهٔ هوشمند با درخواست HR بازتولید شد",
   new_resume_acknowledged: "دریافت رزومهٔ جدید تأیید شد",
   note_added: "یادداشت اضافه شد",
+  note_edited: "یادداشت ویرایش شد",
 }
 
 function Value({ value }: { value: unknown }) {
@@ -154,7 +155,7 @@ function Value({ value }: { value: unknown }) {
 
 export function CandidatePage() {
   const { id = "" } = useParams()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const [data, setData] = useState<CandidateWorkspace | null>(null)
   const [resume, setResume] = useState<ResumeDetail | null>(null)
@@ -162,13 +163,20 @@ export function CandidatePage() {
     reviewProfile(null),
   )
   const [editing, setEditing] = useState(params.get("edit") === "1")
-  const [tab, setTab] = useState(0)
+  const [selectedTab, setSelectedTab] = useState(0)
+  const tab = params.get("tab") === "notes" ? 2 : selectedTab
+  function setTab(value: number) {
+    setSelectedTab(value)
+    const next = new URLSearchParams(params)
+    if (value === 2) next.set("tab", "notes")
+    else { next.delete("tab"); next.delete("application"); next.delete("note") }
+    setParams(next, { replace: true })
+  }
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [mergeTarget, setMergeTarget] = useState<
     CandidateWorkspace["duplicates"][number] | null
   >(null)
-  const [note, setNote] = useState("")
   const load = useCallback(
     async (signal?: AbortSignal) => {
       const workspace = await fetchCandidateWorkspace(id, signal)
@@ -599,38 +607,7 @@ export function CandidatePage() {
                   }}
                 >
                   <Stack spacing={2}>
-                    <Typography variant="h6">یادداشت‌های HR</Typography>
-                    <TextField
-                      label="یادداشت جدید"
-                      multiline
-                      minRows={3}
-                      value={note}
-                      onChange={(event) => setNote(event.target.value)}
-                    />
-                    <Button
-                      variant="outlined"
-                      disabled={Boolean(busy) || !note.trim()}
-                      onClick={async () => {
-                        if (await action("notes", { body: note })) setNote("")
-                      }}
-                    >
-                      ثبت یادداشت
-                    </Button>
-                    {data.notes.map((item) => (
-                      <Paper variant="outlined" key={item.id} sx={{ p: 2 }}>
-                        <Typography
-                          sx={{ whiteSpace: "pre-wrap", fontSize: 13 }}
-                        >
-                          {item.body}
-                        </Typography>
-                        <Typography
-                          color="text.secondary"
-                          sx={{ fontSize: 11, mt: 1 }}
-                        >
-                          {formatJalali(item.created_at)}
-                        </Typography>
-                      </Paper>
-                    ))}
+                    <NotesPanel key={id} candidateId={id} notes={data.notes} applications={data.applications} onChanged={load} />
                   </Stack>
                   <Stack spacing={2}>
                     <Typography variant="h6">درخواست‌های شغلی مرتبط</Typography>
@@ -648,6 +625,7 @@ export function CandidatePage() {
                         <Button component={Link} to={`/roles/${application.role_id}`} sx={{ fontWeight: 650 }}>
                           {application.role_title}
                         </Button>
+                        <Button component={Link} to={`/candidates/${id}?tab=notes&application=${application.id}`} size="small">یادداشت‌های این درخواست</Button>
                         <Chip
                           size="small"
                           sx={{ mt: 1 }}

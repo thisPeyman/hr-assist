@@ -20,6 +20,7 @@ import {
 } from "@mui/material"
 import { BriefcaseBusiness, Columns3, FileText, Inbox, LogOut, Menu, Search, Settings, Users } from "lucide-react"
 import { useAuth } from "@/auth"
+import { NotificationBell } from "@/components/notification-bell"
 import { fetchIngestionSettings, logout } from "@/lib/api"
 
 export function Wordmark() {
@@ -148,6 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </Stack>
           <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <NotificationBell />
             <Button component={Link} to="/review" size="small" aria-label={`صف بازبینی؛ ${reviewCount === null ? "شمارش در دسترس نیست" : reviewCount.toLocaleString("fa-IR") + " مورد"}`}>
               بازبینی {reviewCount === null ? "—" : reviewCount.toLocaleString("fa-IR")}
             </Button>
