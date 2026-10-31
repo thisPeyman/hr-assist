@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.main import app
-from app.models import CandidateApplication, CandidateNote, ResumeFile, ResumeSummary
+from app.models import CandidateNote, ResumeFile, ResumeSummary
 from app.parsing.llm import get_extractor
 from app.profiles import email_key, phone_key
 from app.rls import set_current_org
@@ -153,16 +153,15 @@ async def test_name_only_merge_transfers_notes_applications_and_history(
             session.add(
                 CandidateNote(org_id=me["org"]["id"], candidate_id=candidate, body="Preserved note")
             )
-            session.add(
-                CandidateApplication(
-                    org_id=me["org"]["id"],
-                    candidate_id=candidate,
-                    role_title="Engineer",
-                    stage="received",
-                    data={},
-                )
-            )
         await session.commit()
+    # Equal titles do not imply equal Role identity: distinct Roles remain two.
+    for candidate in (source, target):
+        role = (await api_client.post("/api/roles", json={"title": "Engineer"})).json()
+        await api_client.patch(f"/api/roles/{role['id']}", json={"status": "open"})
+        response = await api_client.post(
+            f"/api/roles/{role['id']}/applications", json={"candidate_id": candidate}
+        )
+        assert response.status_code == 200, response.text
     result = await api_client.post(f"/api/candidates/{source}/merge", json={"target_id": target})
     assert result.status_code == 200, result.text
     detail = (await api_client.get(f"/api/candidates/{target}/workspace")).json()
@@ -263,12 +262,28 @@ async def test_email_phone_bridge_merges_existing_people(api_client):
     )
     install([first, second, bridge])
     target = (await upload(api_client, b"First unique person")).json()["candidate"]["id"]
-    await upload(api_client, b"Second unique person")
+    source = (await upload(api_client, b"Second unique person")).json()["candidate"]["id"]
+    role = (await api_client.post("/api/roles", json={"title": "Bridge role"})).json()
+    await api_client.patch(f"/api/roles/{role['id']}", json={"status": "open"})
+    applications = []
+    for candidate in (target, source):
+        applications.append(
+            (
+                await api_client.post(
+                    f"/api/roles/{role['id']}/applications", json={"candidate_id": candidate}
+                )
+            ).json()
+        )
     joined = await upload(api_client, b"Bridge identity new resume")
     assert joined.status_code == 201, joined.text
     assert joined.json()["candidate"]["id"] == target
     assert len((await api_client.get("/api/candidates")).json()["items"]) == 1
     assert len((await api_client.get("/api/resumes")).json()["items"]) == 1
+    board = (await api_client.get("/api/pipeline/board")).json()
+    assert len(board["applications"]) == 1
+    assert board["applications"][0]["id"] == applications[0]["id"]
+    events = (await api_client.get(f"/api/applications/{applications[0]['id']}")).json()["activity"]
+    assert {event["event_type"] for event in events} == {"application_added", "application_merged"}
 
 
 async def test_stale_diff_never_overwrites_a_later_human_edit(api_client):

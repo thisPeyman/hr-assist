@@ -30,7 +30,7 @@ export function AuthForm({ registering = false }: { registering?: boolean }) {
       if (registering) await signup({ email, password, org_name: org })
       else await login(email, password)
       await refresh()
-      navigate("/resumes", { replace: true })
+      navigate("/board", { replace: true })
     } catch (cause) {
       setError(persianError(cause))
     } finally {

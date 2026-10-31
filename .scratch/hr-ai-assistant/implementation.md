@@ -41,6 +41,22 @@
 - Architecture notes for implementers: `/tmp/opencode/hr-v1-seams.md`. Local pgvector extension unavailable; `pg_trgm` available. Search ticket must provide a real pgvector-capable deployment/CI path without silently substituting fake semantics, and preserve lexical degradation when vectors are unavailable.
 - Isolated pgvector test container prepared: `hr2-v1-vector-tests`, localhost port `56432`, PostgreSQL18 with vector0.8.7/pg_trgm1.6 available. Test-only connection setup: `/tmp/opencode/hr-v1-vector-test-env.md`; host/dev database untouched. Search and later migrations can be tested here.
 - Additional coordinator/implementer context: `/tmp/opencode/hr-v1-agent-contract.md`, `/tmp/opencode/hr-v1-google-auth-notes.md`, `/tmp/opencode/hr-v1-acceptance-checklist.md`.
+- Ticket [12](issues/12-board-roles-applications-stages.md): implemented board home,
+  Roles Draft→Open and independent optional Owners, canonical Applications,
+  explicit stale-safe stage moves/context/reasons and same-id ending reopen;
+  MUI Persian RTL board/Role pages, right-edge collapsed endings, candidate
+  sourcing and navigable detail integration. Migration0007 preserves placeholder
+  Application ids/JSON and distinct Role identity; Merge coalesces same-Role
+  candidacies and preserves notes/history/source state without an automatic move.
+  API/isolated Docker Postgres full backend **199 passed**; Ruff clean; frontend
+  build, 25 existing utility tests and oxlint pass (four pre-existing warnings).
+  Browser/UI/live checks deferred by user choice; no dev DB writes/services.
+  Reusable/future-child boundary and ticket25/26 caveats: `docs/pipeline.md`.
+- Shared dependency blocker **cleared** by coordinator: bounded SOCKS downloads
+  verified against `backend/uv.lock`, installed boto3/botocore/jmespath/s3transfer
+  and python-dateutil/six; imports and `uv pip check` compatible. Ticket12's own
+  full backend run includes passing existing S3 adapter. Historical repair188-pass
+  count above is retained as the evidence available at repair time.
 
 ## Review regression pointers
 

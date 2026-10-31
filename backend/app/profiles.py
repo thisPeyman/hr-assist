@@ -9,6 +9,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import defer
 
 from app.models import (
+    ApplicationActivity,
     Candidate,
     CandidateActivity,
     CandidateApplication,
@@ -206,11 +207,10 @@ async def merge_candidates(session, target, source, actor=None):
         actor,
     )
     target.human_fields = sorted(set(target.human_fields or []) | set(source.human_fields or []))
-    counts = {}
+    counts = {"candidate_applications": await merge_applications(session, target, source, actor)}
     for model in (
         ResumeFile,
         CandidateNote,
-        CandidateApplication,
         CandidateActivity,
         ProfileChange,
     ):
@@ -264,6 +264,59 @@ async def merge_candidates(session, target, source, actor=None):
         .values(status="superseded")
     )
     return target
+
+
+async def merge_applications(session, target, source, actor=None):
+    """Union candidacies before Candidate reassignment hits the canonical key.
+
+    Target state wins without a stage/owner transition. All source state survives
+    in an event; children are reparented before retiring the duplicate. Future
+    application child modules (interviews etc.) must join this explicit boundary.
+    Caller holds the shared org identity/workflow transaction lock.
+    """
+    applications = (
+        await session.scalars(
+            select(CandidateApplication).where(
+                CandidateApplication.org_id == target.org_id,
+                CandidateApplication.candidate_id.in_([source.id, target.id]),
+            )
+        )
+    ).all()
+    canonical = {a.role_id: a for a in applications if a.candidate_id == target.id}
+    incoming = [a for a in applications if a.candidate_id == source.id]
+    for application in incoming:
+        kept = canonical.get(application.role_id)
+        if kept is None:
+            application.candidate_id = target.id
+            continue
+        for child in (CandidateNote, ApplicationActivity):
+            await session.execute(
+                update(child)
+                .where(child.org_id == target.org_id, child.application_id == application.id)
+                .values(application_id=kept.id)
+            )
+        session.add(
+            ApplicationActivity(
+                org_id=target.org_id,
+                application_id=kept.id,
+                actor_user_id=actor,
+                event_type="application_merged",
+                data={
+                    "source_application_id": str(application.id),
+                    "source_candidate_id": str(source.id),
+                    "source_stage_id": str(application.stage_id),
+                    "source_owner_id": str(application.owner_id) if application.owner_id else None,
+                    "source_created_at": application.created_at.isoformat(),
+                    "source_data": application.data,
+                    "kept_stage_id": str(kept.stage_id),
+                    "kept_owner_id": str(kept.owner_id) if kept.owner_id else None,
+                    "resolution": "target_state_preserved",
+                },
+            )
+        )
+        await session.delete(application)
+    await session.flush()
+    return len(incoming)
 
 
 async def attach_profile(session, resume, incoming, actor=None):

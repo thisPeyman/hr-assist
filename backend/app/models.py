@@ -15,9 +15,11 @@ from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import (
     JSON,
     BigInteger,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Integer,
     LargeBinary,
@@ -134,6 +136,7 @@ class Candidate(Base):
     """A person + Profile in the org-wide Talent Pool (GLOSSARY)."""
 
     __tablename__ = "candidates"
+    __table_args__ = (UniqueConstraint("org_id", "id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -373,13 +376,21 @@ class CandidateNote(Base):
     candidate_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("candidates.id", ondelete="cascade"), index=True
     )
+    application_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="set null"))
     body: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "application_id"],
+            ["candidate_applications.org_id", "candidate_applications.id"],
+        ),
+    )
+
 
 class CandidateApplication(Base):
-    """Candidate-linked application record; workflow editing belongs to ticket 12."""
+    """One canonical Candidate × Role; legacy title/stage retained as snapshots."""
 
     __tablename__ = "candidate_applications"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -390,4 +401,62 @@ class CandidateApplication(Base):
     role_title: Mapped[str] = mapped_column(Text)
     stage: Mapped[str] = mapped_column(Text, default="received")
     data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    role_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    stage_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "role_id", name="application_candidate_role_key"),
+        UniqueConstraint("org_id", "id"),
+        ForeignKeyConstraint(["org_id", "role_id"], ["roles.org_id", "roles.id"]),
+        ForeignKeyConstraint(
+            ["org_id", "stage_id"], ["pipeline_stages.org_id", "pipeline_stages.id"]
+        ),
+        ForeignKeyConstraint(["org_id", "candidate_id"], ["candidates.org_id", "candidates.id"]),
+    )
+
+
+class ApplicationActivity(Base):
+    """Immutable event payload; only application_id may change during Merge."""
+
+    __tablename__ = "application_activity"
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    application_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="set null")
+    )
+    event_type: Mapped[str] = mapped_column(Text)
+    data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "application_id"],
+            ["candidate_applications.org_id", "candidate_applications.id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class PipelineStage(Base):
+    __tablename__ = "pipeline_stages"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    name: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer)
+    __table_args__ = (UniqueConstraint("org_id", "kind"), UniqueConstraint("org_id", "id"))
+
+
+class Role(Base):
+    __tablename__ = "roles"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id", ondelete="cascade"), index=True)
+    title: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="draft")
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        CheckConstraint("status in ('draft','open','paused','closed')"),
+    )

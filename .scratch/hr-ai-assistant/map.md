@@ -41,6 +41,7 @@ A **build-ready spec** at `.scratch/hr-ai-assistant/spec.md` for v1 of a SaaS AI
 - [13 - Editable profile and merge](issues/13-editable-profile-diff-merge.md): implemented candidate workspace, normalized matching, protected corrections, diff decisions, latest-only retention and merge transfer under tenant isolation.
 - [14 - Cached AI summary](issues/14-cached-ai-resume-summary.md): cache, precomputation, regeneration, guardrails and 20-case offline evaluation implemented. Groq access recovered on retest; a real 173-word Persian summary was persisted. Full live golden evaluation remains pending.
 - [29 - Review regressions](issues/29-review-regressions.md): repair the current MUI continuation's missing review/settings routes; preserve Candidate/Activity on resume deletion; reuse identity/reconciliation/version/summary paths for human ingestion; explicit stale-safe corrections and retired proposals; Jalali diff/certificate presentation. API/Postgres regressions and static frontend validation; browser/live acceptance deferred.
+- [12 - Board, Roles, Applications, Stages](issues/12-board-roles-applications-stages.md): Persian MUI board home and Role controls, canonical Candidate×Role with explicit stage moves/reopen, optional independent Owners, immutable Application Activity and collapsed right-edge endings; migration preserves legacy Applications, same-Role Merge coalesces children/history without moving stage. API/isolated-Postgres and static frontend verified; browser acceptance deferred. Extension boundary: `docs/pipeline.md`.
 
 ## Not yet specified
 

@@ -128,6 +128,15 @@ export interface UploadResult {
 }
 
 const PERSIAN_ERRORS: Record<string, string> = {
+  ROLE_NOT_FOUND: "فرصت شغلی پیدا نشد؛ فهرست را تازه کنید.",
+  ROLE_NOT_OPEN: "برای افزودن کاندیدا، ابتدا فرصت شغلی را باز کنید.",
+  INVALID_OWNER: "مسئول باید عضو فعال همین سازمان باشد.",
+  INVALID_ROLE_TRANSITION: "این تغییر وضعیت مجاز نیست؛ صفحه را تازه کنید.",
+  ROLE_TITLE_REQUIRED: "عنوان فرصت شغلی را وارد کنید.",
+  APPLICATION_NOT_FOUND: "درخواست شغلی پیدا نشد؛ ممکن است ادغام شده باشد.",
+  APPLICATION_CHANGED_REFRESH: "مرحلهٔ این درخواست تغییر کرده است؛ صفحه را تازه کنید و دوباره تصمیم بگیرید.",
+  STAGE_NOT_FOUND: "مرحله پیدا نشد؛ صفحه را تازه کنید.",
+  REASON_ONLY_FOR_REJECTION: "دلیل رد فقط برای مرحلهٔ ردشده قابل ثبت است.",
   CANDIDATE_NOT_FOUND: "کاندیدا پیدا نشد؛ ممکن است ادغام یا حذف شده باشد.",
   INVALID_PROFILE: "ساختار اطلاعات پروفایل معتبر نیست؛ فیلدها را بررسی کنید.",
   PROFILE_CHANGED_REFRESH: "این فیلد پس از پیشنهاد تغییر کرده است؛ صفحه را تازه کنید.",
@@ -159,7 +168,7 @@ export interface CandidateWorkspace {
   duplicates: { id: string; full_name: string; email: string | null; phone: string | null; similarity: number }[]
   activity: { id: number; event_type: string; data: Record<string, unknown>; created_at: string }[]
   notes: { id: string; body: string; created_at: string }[]
-  applications: { id: string; role_title: string; stage: string }[]
+  applications: PipelineApplication[]
 }
 
 export async function fetchCandidateWorkspace(id: string, signal?: AbortSignal): Promise<CandidateWorkspace> {
@@ -328,6 +337,63 @@ export async function fetchCandidates(): Promise<CandidateSummary[]> {
   const body = (await res.json()) as { items: CandidateSummary[] }
   return body.items
 }
+
+export interface PipelineStage {
+  id: string
+  name: string
+  kind: string
+  position: number
+}
+export interface PipelineRole {
+  id: string
+  title: string
+  status: "draft" | "open" | "paused" | "closed"
+  owner_id: string | null
+}
+export interface PipelineOwner { id: string; email: string; active: boolean }
+export interface PipelineApplication {
+  id: string
+  candidate_id: string
+  role_id: string
+  role_title: string
+  stage_id: string
+  stage: string
+  stage_kind: string
+  owner_id: string | null
+  full_name: string
+  headline: string | null
+}
+export interface ApplicationEvent {
+  id: number
+  event_type: string
+  actor_user_id: string | null
+  created_at: string
+  data: Record<string, unknown>
+}
+export interface PipelineBoard {
+  stages: PipelineStage[]
+  roles: PipelineRole[]
+  applications: PipelineApplication[]
+}
+
+/** Shared transport/error handling; feature helpers expose typed public workflows. */
+async function pipelineRequest<T>(path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await request(`/api/${path}`, {
+    method, signal, headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) await throwApiError(response)
+  return response.json()
+}
+export const fetchPipelineBoard = (signal?: AbortSignal) => pipelineRequest<PipelineBoard>("pipeline/board", "GET", undefined, signal)
+export const fetchPipelineOwners = (signal?: AbortSignal) => pipelineRequest<{ items: PipelineOwner[] }>("pipeline/owners", "GET", undefined, signal)
+export const fetchRoles = (signal?: AbortSignal) => pipelineRequest<{ items: PipelineRole[] }>("roles", "GET", undefined, signal)
+export const createRole = (title: string, owner_id: string | null) => pipelineRequest<PipelineRole>("roles", "POST", { title, owner_id })
+export const editRole = (id: string, changes: Partial<Pick<PipelineRole, "title" | "status" | "owner_id">>) => pipelineRequest<PipelineRole>(`roles/${id}`, "PATCH", changes)
+export const addToRole = (role: string, candidate_id: string, owner_id: string | null = null) => pipelineRequest<{ id: string }>(`roles/${role}/applications`, "POST", { candidate_id, owner_id })
+export const moveApplication = (application: PipelineApplication, stage_id: string, context: string, reason: string | null) => pipelineRequest(`applications/${application.id}/stage`, "POST", { stage_id, expected_stage_id: application.stage_id, context, reason })
+export const assignApplication = (id: string, owner_id: string | null) => pipelineRequest(`applications/${id}/owner`, "PATCH", { owner_id })
+export const fetchApplication = (id: string, signal?: AbortSignal) => pipelineRequest<{ activity: ApplicationEvent[] }>(`applications/${id}`, "GET", undefined, signal)
 
 export async function fetchCandidate(id: string): Promise<CandidateDetail> {
   const res = await request(`/api/candidates/${id}`)
