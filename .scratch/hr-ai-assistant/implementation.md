@@ -6,6 +6,7 @@
 - Preserve the current Material UI/Emotion frontend rather than reverting the latest commit's UI rewrite. Reconcile the documented stack to match this continuation decision.
 - Workflow: one implementer worktree/branch per ticket, TDD, merge current integration tip before reporting; a merger agent merges completed work into integration. No remote PR is requested; local Markdown tracker is authoritative.
 - Do not use real credentials, send real email, deploy infrastructure, or spend API credit for verification. Record live/human-only checks honestly as pending, not successful.
+- User-confirmed test seams (2026-10-31): API and isolated database only. External Google/AI/mail adapters may be mocked through HTTP/API tests. Run static lint/build, but defer new browser/UI tests and live integration acceptance.
 - Tests recreate only `hr_test`; serialize backend test runs across worktrees. Use existing main repo Python environment if necessary; dependency synchronization currently times out downloading botocore. Frontend dependencies are installed in the main worktree.
 
 ## Sequence
@@ -28,6 +29,7 @@
 ## Progress
 
 - Planning: clean main checked; integration branch created.
+- Architecture notes for implementers: `/tmp/opencode/hr-v1-seams.md`. Local pgvector extension unavailable; `pg_trgm` available. Search ticket must provide a real pgvector-capable deployment/CI path without silently substituting fake semantics, and preserve lexical degradation when vectors are unavailable.
 
 ## Review regression pointers
 
