@@ -36,6 +36,10 @@ os.environ["HR_COOKIE_SECURE"] = "false"
 os.environ["HR_RESUME_AI_PROVIDER"] = "openai"
 os.environ["HR_OPENAI_API_KEY"] = ""
 os.environ["HR_GROQ_API_KEY"] = ""
+os.environ["HR_SEARCH_API_KEY"] = ""
+os.environ["HR_SEARCH_EMBEDDING_API_KEY"] = ""
+os.environ["HR_SEARCH_QUERY_MODEL"] = ""
+os.environ["HR_SEARCH_EMBEDDING_MODEL"] = ""
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402

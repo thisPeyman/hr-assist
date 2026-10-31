@@ -16,6 +16,7 @@ from app.pipeline import router as pipeline_router
 from app.resumes import resumes_router
 from app.review import review_router
 from app.routes import api_router, auth_router
+from app.search import router as search_router
 
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ app.include_router(review_router)
 app.include_router(resumes_router)
 app.include_router(candidate_profiles_router)
 app.include_router(pipeline_router)
+app.include_router(search_router)
 
 
 @app.get("/healthz", include_in_schema=False)

@@ -95,6 +95,32 @@
     original semantic or UI criteria. Integration tip `1fa1c5e` checked before
     implementation and merged before delivery (already ancestor/current).
 
+- Ticket [15](issues/15-nl-search-editable-chips.md) (2026-10-31): implementable
+  API/database and static frontend scope complete; **full15 ready-for-human** for
+  authorized live Persian semantic quality, browser/keyboard/mobile acceptance and
+  deployment/provider approvals. Search is home, `/board` remains prominent.
+  - Real configurable structured-action/embedding adapters reuse locked OpenAI SDK;
+    no dependencies/lockfile changes. Validated numeric/negated/pipeline DSL,
+    protected fa/en alias denylist, tenant24h cache, filters-first SSE, SQL-only chip
+    edits and actual softest-nonzero relaxation. Vector SQL savepoint recovery keeps
+    the same tenant/hard-filter lexical population; no synthetic vectors in runtime.
+  - Accepted-Profile documents and conservative unioned Gregorian YOE refresh across
+    ingestion/edits/accepted proposals/review/Merge. Migration0008 provides provider-
+    free backfill, generated FTS/GIN, trgm/GIN, B-tree, real partial1536-d HNSW and
+    FORCE RLS. Exact materialized eligible-population cosine/RRF is deliberate for
+    v1; explicit bounded `/api/search/index` retries/backfills embeddings. Ordinary
+    search never embeds documents. CI now uses `pgvector/pgvector:pg18`.
+  - Final full backend command uses the same isolated Docker URLs documented for14:
+    **271 passed** (49 new public HTTP/real SQL/schema/backfill cases),58.55s.
+    `/home/peyman/Projects/me/hr2/backend/.venv/bin/ruff check .`:clean.
+    `npm run build`:pass (existing main-chunk size warning); `npm test`:25 pass;
+    `./node_modules/.bin/oxlint`:zero errors/four pre-existing warnings. The
+    `npm run lint` harness wrapper failed parsing output; direct oxlint succeeded.
+  - No paid/live calls, new browser/UI tests, development migration or deployment.
+    Configuration, exact retrieval/index seam, coverage/failure behavior, YOE
+    snapshot limits and explicit human acceptance gates: `docs/candidate-search.md`.
+    Integration base/current tip verified as `ff96489` before delivery.
+
 ## Review regression pointers
 
 - `backend/app/resumes.py:251`: Member deletion silently erases Candidate and cascading Activity; remove implicit Candidate deletion and implement proper Admin erasure in ticket 26.

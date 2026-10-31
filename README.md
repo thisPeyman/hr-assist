@@ -57,7 +57,10 @@ in `.scratch/hr-ai-assistant/` (v1 spec: `spec.md`).
 ## Local setup
 
 Requirements: Python 3.14 ([uv](https://docs.astral.sh/uv/)), Node 22,
-PostgreSQL 15+ with superuser access for your OS user.
+PostgreSQL 15+ **with pgvector and pg_trgm available** and migration privileges
+for your OS user. CI uses `pgvector/pgvector:pg18`. Migration0008 fails safely if
+pgvector is unavailable; provision the package/image before migrating an explicitly
+chosen database. No automatic fallback schema is installed.
 
 One-time Postgres bootstrap (peer auth on a local Ubuntu cluster):
 
@@ -89,6 +92,10 @@ The built SPA is also served by the backend itself (`app.frontend()`) whenever
 Resume ingestion, local mock email, review queue, OCR/vision and legacy-format
 setup: [docs/resume-ingestion.md](docs/resume-ingestion.md). Placeholder-only
 environment values are in [backend/.env.example](backend/.env.example).
+
+Candidate search configuration, SQL/semantic degradation, derived years,
+explicit embedding reindex and deployment behavior:
+[docs/candidate-search.md](docs/candidate-search.md).
 
 Everything CI runs, locally:
 
