@@ -31,6 +31,8 @@
 
 - Planning: clean main checked; integration branch created.
 - Architecture notes for implementers: `/tmp/opencode/hr-v1-seams.md`. Local pgvector extension unavailable; `pg_trgm` available. Search ticket must provide a real pgvector-capable deployment/CI path without silently substituting fake semantics, and preserve lexical degradation when vectors are unavailable.
+- Isolated pgvector test container prepared: `hr2-v1-vector-tests`, localhost port `56432`, PostgreSQL18 with vector0.8.7/pg_trgm1.6 available. Test-only connection setup: `/tmp/opencode/hr-v1-vector-test-env.md`; host/dev database untouched. Search and later migrations can be tested here.
+- Additional coordinator/implementer context: `/tmp/opencode/hr-v1-agent-contract.md`, `/tmp/opencode/hr-v1-google-auth-notes.md`, `/tmp/opencode/hr-v1-acceptance-checklist.md`.
 
 ## Review regression pointers
 
