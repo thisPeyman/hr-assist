@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.orm import load_only
 
 from app.models import (
     ApplicationActivity,
@@ -239,6 +240,9 @@ async def stage_for(session, org_id, stage_id):
 async def application_rows(session, org_id, candidate_id=None):
     query = (
         select(CandidateApplication, Candidate, Role, PipelineStage)
+        .options(
+            load_only(Candidate.id, Candidate.full_name, Candidate.headline, Candidate.profile)
+        )
         .join(Candidate, CandidateApplication.candidate_id == Candidate.id)
         .join(Role, CandidateApplication.role_id == Role.id)
         .join(PipelineStage, CandidateApplication.stage_id == PipelineStage.id)

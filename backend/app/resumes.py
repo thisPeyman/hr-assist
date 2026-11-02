@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import defer
+from sqlalchemy.orm import defer, load_only
 
 from app.db import get_session
 from app.models import (
@@ -131,7 +131,10 @@ async def list_resumes(
 ) -> ResumeList:
     query = (
         select(ResumeFile, Candidate)
-        .options(defer(ResumeFile.bytes))
+        .options(
+            defer(ResumeFile.bytes),
+            load_only(Candidate.id, Candidate.full_name, Candidate.email),
+        )
         .outerjoin(Candidate, ResumeFile.candidate_id == Candidate.id)
         .where(ResumeFile.org_id == ctx.org.id)
     )

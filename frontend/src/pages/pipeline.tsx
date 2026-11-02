@@ -4,7 +4,6 @@ import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, MenuItem, Paper, Stack, TextField, Typography,
 } from "@mui/material"
-import { AppShell } from "@/components/shell"
 import { CreateRoleDialog, OwnerBadge, OwnerSelect } from "@/components/pipeline-controls"
 import { ownerLabel, roleStatusLabels } from "@/lib/pipeline"
 import {
@@ -100,7 +99,7 @@ export function PipelinePage() {
   const candidateList = (candidates ?? []).filter(candidate =>
     `${candidate.full_name} ${candidate.email ?? ""} ${candidate.headline ?? ""}`.toLocaleLowerCase().includes(candidateSearch.toLocaleLowerCase()))
 
-  return <AppShell>
+  return <>
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", mb: 3 }}>
       <Box><Typography variant="h4">{roleId ? selectedRole?.title ?? "فرصت شغلی" : "برد استخدام"}</Typography>
         <Typography color="text.secondary" sx={{ mt: 1, fontSize: 13 }}>هر کارت، یک کاندیدا در یک فرصت شغلی است. جابه‌جایی فقط با تصمیم شما ثبت می‌شود.</Typography>
@@ -244,5 +243,5 @@ export function PipelinePage() {
         <Button variant="contained" disabled={busy || !sourceRole || !candidateId} onClick={() => void mutate(() => addToRole(sourceRole, candidateId, sourceOwner), () => setSourcing(false))}>{busy ? "در حال ثبت…" : "افزودن یا بازگشایی"}</Button>
       </DialogActions>
     </Dialog>
-  </AppShell>
+  </>
 }

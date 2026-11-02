@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { Link } from "react-router"
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
   DialogActions, DialogTitle, Paper, Stack, Tab, Tabs, Typography } from "@mui/material"
-import { AppShell } from "@/components/shell"
 import { ProfileEditor } from "@/components/profile-editor"
 import { fetchReview, fetchReviewDetail, persianError, resolveReview,
   type CandidateProfile, type ReviewDetail, type ReviewList } from "@/lib/api"
@@ -69,7 +68,7 @@ export function ReviewPage() {
     finally { setBusy(false) }
   }
   const actionable = detail && ["needs_review", "failed"].includes(detail.status) && !detail.reason?.startsWith("human_dismissed")
-  return <AppShell>
+  return <>
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", mb: 3 }}>
       <Box><Typography variant="h4">صف بازبینی رزومه‌ها</Typography>
         <Typography color="text.secondary" sx={{ mt: 1 }}>اطلاعات ناقص را تکمیل کنید؛ تصمیم نهایی با شماست.</Typography></Box>
@@ -128,5 +127,5 @@ export function ReviewPage() {
       </DialogContent>
       <DialogActions><Button disabled={busy} onClick={() => setDetail(null)}>بستن بررسی سند</Button></DialogActions>
     </Dialog>
-  </AppShell>
+  </>
 }

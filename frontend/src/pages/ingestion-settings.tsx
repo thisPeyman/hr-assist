@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router"
 import { Alert, Button, CircularProgress, Paper, Stack, Typography } from "@mui/material"
-import { AppShell } from "@/components/shell"
 import { fetchIngestionSettings, persianError, type IngestionSettings } from "@/lib/api"
 
 export function IngestionSettingsPage() {
@@ -14,7 +13,7 @@ export function IngestionSettingsPage() {
       .catch(cause => { if (active) setError(persianError(cause)) })
     return () => { active = false }
   }, [])
-  return <AppShell>
+  return <>
     <Typography variant="h4" sx={{ mb: 3 }}>تنظیمات دریافت رزومه</Typography>
     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
     {!data && !error && <CircularProgress aria-label="بارگذاری تنظیمات" />}
@@ -35,5 +34,5 @@ export function IngestionSettingsPage() {
         <Button component={Link} to="/upload" variant="contained">بارگذاری دستی رزومه</Button>
       </Stack>
     </Paper>}
-  </AppShell>
+  </>
 }

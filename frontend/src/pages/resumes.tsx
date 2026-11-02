@@ -36,7 +36,6 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { AppShell } from "@/components/shell"
 import {
   deleteResume,
   fetchResume,
@@ -693,7 +692,7 @@ export function ResumesPage() {
     }
   }
   return (
-    <AppShell>
+    <>
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -961,6 +960,6 @@ export function ResumesPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </AppShell>
+    </>
   )
 }

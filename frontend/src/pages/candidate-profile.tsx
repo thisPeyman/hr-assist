@@ -26,7 +26,6 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react"
-import { AppShell } from "@/components/shell"
 import { ProfileEditor } from "@/components/profile-editor"
 import { AddToRoleButton } from "@/components/pipeline-controls"
 import { SummaryFacts } from "@/components/summary-facts"
@@ -256,7 +255,7 @@ export function CandidatePage() {
         profile: data?.profile ?? null,
       }
   return (
-    <AppShell>
+    <>
       <Button
         component={Link}
         to="/candidates"
@@ -722,6 +721,6 @@ export function CandidatePage() {
           </Dialog>
         </>
       )}
-    </AppShell>
+    </>
   )
 }

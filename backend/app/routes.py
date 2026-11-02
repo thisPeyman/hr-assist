@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.config import settings
 from app.db import get_session
@@ -367,6 +368,16 @@ async def list_candidates(
         (
             await session.execute(
                 select(Candidate)
+                .options(
+                    load_only(
+                        Candidate.id,
+                        Candidate.full_name,
+                        Candidate.headline,
+                        Candidate.email,
+                        Candidate.created_at,
+                        Candidate.new_resume_received,
+                    )
+                )
                 .where(Candidate.org_id == ctx.org.id)
                 .order_by(Candidate.created_at.desc(), Candidate.id.desc())
             )

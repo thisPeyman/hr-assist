@@ -17,7 +17,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
-import { AppShell } from "@/components/shell"
 import { fetchCandidates, persianError, type CandidateSummary } from "@/lib/api"
 import { formatJalali } from "@/lib/jalali"
 
@@ -44,7 +43,7 @@ export function CandidateBankPage() {
       .includes(search.toLocaleLowerCase()),
   )
   return (
-    <AppShell>
+    <>
       <Typography variant="h4">بانک کاندیداها</Typography>
       <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>
         هر فرد یک پروفایل دارد؛ رزومه‌های جدید و اصلاحات HR در همان پرونده جمع
@@ -128,6 +127,6 @@ export function CandidateBankPage() {
           </Stack>
         )}
       </Paper>
-    </AppShell>
+    </>
   )
 }

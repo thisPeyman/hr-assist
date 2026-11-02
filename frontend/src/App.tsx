@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react"
-import { Navigate, Route, Routes } from "react-router"
+import { Navigate, Outlet, Route, Routes } from "react-router"
 import { Box, CircularProgress } from "@mui/material"
 import { useAuth } from "@/auth"
+import { AppShell } from "@/components/shell"
 import { LoginPage } from "@/pages/login"
 import { SignupPage } from "@/pages/signup"
 const ResumesPage = lazy(() =>
@@ -38,6 +39,10 @@ function Protected({ children }: { children: React.ReactNode }) {
   return children
 }
 
+function ProtectedShell() {
+  return <Protected><AppShell><Outlet /></AppShell></Protected>
+}
+
 export default function App() {
   return (
     <Suspense
@@ -50,46 +55,20 @@ export default function App() {
       }
     >
       <Routes>
-        <Route path="/search" element={<Protected><SearchPage /></Protected>} />
-        <Route path="/board" element={<Protected><PipelinePage /></Protected>} />
-        <Route path="/roles" element={<Protected><RolesPage /></Protected>} />
-        <Route path="/roles/:roleId" element={<Protected><PipelinePage /></Protected>} />
-        <Route path="/review" element={<Protected><ReviewPage /></Protected>} />
-        <Route path="/settings/ingestion" element={<Protected><IngestionSettingsPage /></Protected>} />
-        <Route
-          path="/candidates"
-          element={
-            <Protected>
-              <CandidateBankPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/candidates/:id"
-          element={
-            <Protected>
-              <CandidatePage />
-            </Protected>
-          }
-        />
+        <Route element={<ProtectedShell />}>
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/board" element={<PipelinePage />} />
+          <Route path="/roles" element={<RolesPage />} />
+          <Route path="/roles/:roleId" element={<PipelinePage />} />
+          <Route path="/review" element={<ReviewPage />} />
+          <Route path="/settings/ingestion" element={<IngestionSettingsPage />} />
+          <Route path="/candidates" element={<CandidateBankPage />} />
+          <Route path="/candidates/:id" element={<CandidatePage />} />
+          <Route path="/resumes" element={<ResumesPage />} />
+          <Route path="/upload" element={<UploadPage />} />
+        </Route>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route
-          path="/resumes"
-          element={
-            <Protected>
-              <ResumesPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/upload"
-          element={
-            <Protected>
-              <UploadPage />
-            </Protected>
-          }
-        />
         <Route path="*" element={<Navigate to="/search" replace />} />
       </Routes>
     </Suspense>

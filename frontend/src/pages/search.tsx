@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router"
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, MenuItem, Paper, Snackbar, Stack, TextField, Typography } from "@mui/material"
 import { ArrowUpRight, Columns3, Plus, Search, SlidersHorizontal } from "lucide-react"
-import { AppShell } from "@/components/shell"
 import { ApiError, persianError } from "@/lib/api"
 import { enumLabels, fieldLabels, filterLabel, opLabels, searchWarning, streamSearch, type SearchCandidate, type SearchDSL, type SearchFilter } from "@/lib/search"
 
@@ -92,7 +91,7 @@ export function SearchPage() {
   function update(next: SearchDSL) { setDSL(next); void run({ dsl: next }) }
   const softest = dsl.filters.find(f => f.id === relax)
 
-  return <AppShell>
+  return <>
     <Stack spacing={3}>
       <Paper variant="outlined" component="header" sx={{ p: { xs: 2, sm: 3 }, borderTop: "4px solid", borderTopColor: "primary.main" }}>
         <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", gap: 2, mb: 2 }}>
@@ -133,5 +132,5 @@ export function SearchPage() {
     </Stack>
     {editing ? <FilterEditor key={editing.id} filter={editing} onClose={() => setEditing(null)} onSave={value => { setEditing(null); update({ ...dsl, filters: [...dsl.filters.filter(f => f.id !== value.id), value] }) }} /> : null}
     <Snackbar open={Boolean(toast)} autoHideDuration={10000} onClose={() => setToast("")} message={toast} />
-  </AppShell>
+  </>
 }

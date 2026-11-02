@@ -12,7 +12,6 @@ import {
   Typography,
 } from "@mui/material"
 import { ArrowLeft, FileText, Trash2, UploadCloud } from "lucide-react"
-import { AppShell } from "@/components/shell"
 import { persianError, uploadResume } from "@/lib/api"
 import { parseStatusLabel } from "@/lib/profile"
 
@@ -106,7 +105,7 @@ export function UploadPage() {
   }
   const pending = entries.filter((entry) => entry.state === "queued").length
   return (
-    <AppShell>
+    <>
       <Stack spacing={1} sx={{ mb: 3 }}>
         <Typography variant="h4">بارگذاری رزومه</Typography>
         <Typography color="text.secondary">
@@ -287,6 +286,6 @@ export function UploadPage() {
           </Button>
         </Stack>
       </Paper>
-    </AppShell>
+    </>
   )
 }

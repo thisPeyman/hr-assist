@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router"
 import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, Typography } from "@mui/material"
-import { AppShell } from "@/components/shell"
 import { CreateRoleDialog, OwnerBadge } from "@/components/pipeline-controls"
 import { roleStatusLabels } from "@/lib/pipeline"
 import { fetchRoles, fetchPipelineOwners, persianError, type PipelineRole, type PipelineOwner } from "@/lib/api"
@@ -21,7 +20,7 @@ export function RolesPage() {
     void Promise.resolve().then(() => load(controller.signal)).catch(cause => { if (!controller.signal.aborted) setError(persianError(cause)) })
     return () => controller.abort()
   }, [load])
-  return <AppShell>
+  return <>
     <Stack direction="row" sx={{ justifyContent: "space-between", gap: 2, mb: 3 }}>
       <Box><Typography variant="h4">فرصت‌های شغلی</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>پیش‌نویس بسازید، مسئول مشخص کنید و برای شروع جذب آن را باز کنید.</Typography></Box>
       <Button variant="contained" onClick={() => setCreating(true)}>فرصت جدید</Button>
@@ -38,5 +37,5 @@ export function RolesPage() {
       </Stack>
     </Paper>)}</Stack>
     <CreateRoleDialog open={creating} onClose={() => setCreating(false)} owners={owners} onCreated={role => { setCreating(false); navigate(`/roles/${role.id}`) }} />
-  </AppShell>
+  </>
 }

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CandidateNote, Membership, Notification, User
 from app.resumes import SessionDep
@@ -15,12 +16,18 @@ from app.tenancy import TenantContextDep
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
+async def notifications_available(session: AsyncSession) -> bool:
+    return await session.scalar(select(func.to_regclass("notifications"))) is not None
+
+
 async def notify(session, *, org_id, recipient_id, kind, dedupe_key, note_id=None):
     """Reusable idempotent delivery for trusted workflow callers (17/23/24).
 
     Stable workflow dedupe keys; no user-supplied URLs or content. Inactive owners
     receive no new delivery. Recipient references are also tenant-FK protected.
     """
+    if not await notifications_available(session):
+        return
     active = await session.scalar(
         select(User.id)
         .join(Membership)
@@ -43,6 +50,8 @@ async def notify(session, *, org_id, recipient_id, kind, dedupe_key, note_id=Non
 
 @router.get("")
 async def inbox(ctx: TenantContextDep, session: SessionDep) -> dict:
+    if not await notifications_available(session):
+        return {"items": [], "unread_count": 0}
     scope = (Notification.org_id == ctx.org.id, Notification.recipient_id == ctx.user.id)
     unread = await session.scalar(
         select(func.count()).select_from(Notification).where(*scope, Notification.read_at.is_(None))
@@ -88,6 +97,8 @@ class ReadState(BaseModel):
 async def read_state(
     notification_id: UUID, data: ReadState, ctx: TenantContextDep, session: SessionDep
 ) -> dict:
+    if not await notifications_available(session):
+        raise HTTPException(404, "NOTIFICATION_NOT_FOUND")
     item = await session.scalar(
         select(Notification)
         .where(
