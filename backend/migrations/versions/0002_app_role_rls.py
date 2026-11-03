@@ -14,18 +14,15 @@ import os
 from collections.abc import Sequence
 
 from alembic import op
+from app.config import settings
 
 revision: str = "0002"
 down_revision: str | None = "0001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Kept in sync with app.config.Settings.app_db_password's default.
-_DEFAULT_PASSWORD = "hr_app_dev"
-
-
 def _app_db_password() -> str:
-    return os.environ.get("HR_APP_DB_PASSWORD", _DEFAULT_PASSWORD).replace("'", "''")
+    return os.environ.get("HR_APP_DB_PASSWORD", settings.app_db_password).replace("'", "''")
 
 
 def upgrade() -> None:

@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: hr-assist-backend
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /healthz
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - key: HR_MIGRATION_DATABASE_URL
+        sync: false
+      - key: HR_APP_DATABASE_URL
+        sync: false
+      - key: HR_APP_DB_PASSWORD
+        generateValue: true
+      - key: HR_RESET_PASSWORD_TOKEN_SECRET
+        generateValue: true
+      - key: HR_VERIFICATION_TOKEN_SECRET
+        generateValue: true
+      - key: HR_COOKIE_SECURE
+        value: "true"
+      - key: HR_RESUME_AI_PROVIDER
+        value: groq
+      - key: HR_GROQ_API_KEY
+        sync: false
+      - key: HR_RESUME_EXTRACT_MODEL
+        value: qwen/qwen3.8-27b
+      - key: HR_RESUME_EXTRACT_MODEL_ESCALATION
+        value: qwen/qwen3.8-27b

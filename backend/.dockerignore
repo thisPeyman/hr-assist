@@ -1,0 +1,14 @@
+# Only runtime source and the locked dependency manifest enter the image.
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!app/
+!app/**
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*

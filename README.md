@@ -89,6 +89,8 @@ The built SPA is also served by the backend itself (`app.frontend()`) whenever
 
 ## Tests / CI
 
+Production hosting: [Render + Neon deployment](docs/deployment-render-neon.md).
+
 Resume ingestion, local mock email, review queue, OCR/vision and legacy-format
 setup: [docs/resume-ingestion.md](docs/resume-ingestion.md). Placeholder-only
 environment values are in [backend/.env.example](backend/.env.example).
